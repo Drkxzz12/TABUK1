@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # capstone_app
 
 A new Flutter project.
@@ -14,3 +15,6 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+=======
+# Tabuk
+>>>>>>> 10e1b29d83b8100848894356be7282aa5b0e4cd5
