@@ -157,7 +157,7 @@ class GoogleVerificationHelper {
 
   /// DEPRECATED: Google users should not see verification screens
   /// This method is kept for backward compatibility but should not be used
-  @deprecated
+  @Deprecated('Google users should not see verification screens. This method is a no-op.')
   static void showGoogleVerificationScreen(
     BuildContext context,
     String email, {
@@ -165,7 +165,7 @@ class GoogleVerificationHelper {
     bool showBackButton = true,
   }) {
     debugPrint('WARNING: showGoogleVerificationScreen called - Google users should not need verification');
-    // Instead of showing verification, just complete immediately
+    // No-op: Immediately complete verification for backward compatibility
     onVerificationComplete();
   }
 }

@@ -19,18 +19,28 @@ class MainTouristScreen extends StatefulWidget {
 class _MainTouristScreenState extends State<MainTouristScreen> {
   int _selectedIndex = 0;
   String? _userRole; // Assume this is fetched from somewhere
+  bool get _isGuest => _userRole?.toLowerCase() == 'guest';
 
   // List of screens for navigation
   List<Widget> get _screens {
-    return [
-      const HomeScreen(),
-      const MapScreen(),
-      const TripsScreen(),
-      const EventCalendarScreen(),
-      _userRole == null
-          ? const Center(child: CircularProgressIndicator())
-          : const ProfileScreen(),
-    ];
+    if (_isGuest) {
+      // Allow access to Map, Events, and Profile for guests
+      return [
+        const MapScreen(),
+        const EventCalendarScreen(),
+        const ProfileScreen(),
+      ];
+    } else {
+      return [
+        const HomeScreen(),
+        const MapScreen(),
+        const TripsScreen(),
+        const EventCalendarScreen(),
+        _userRole == null
+            ? const Center(child: CircularProgressIndicator())
+            : const ProfileScreen(),
+      ];
+    }
   }
 
   @override
@@ -49,7 +59,21 @@ Future<void> _fetchUserRole() async {
 }
 
   void _onItemTapped(int index) {
-    // Removed guest profile access prevention
+    // Restrict guest navigation to only allowed tabs
+    if (_isGuest) {
+      // Only allow Map (0), Events (1), and Profile (2)
+      if (index > 2) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This feature is only available for registered users'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    }
     setState(() {
       _selectedIndex = index;
     });
@@ -64,25 +88,39 @@ Future<void> _fetchUserRole() async {
   }
 
   Widget _buildBottomNavBar() {
-    return BottomNavigationBar(
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Maps'),
-        BottomNavigationBarItem(icon: Icon(Icons.luggage), label: 'Trips'),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.calendar_today),
-          label: 'Calendar',
-        ),
-        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-      ],
-      currentIndex: _selectedIndex,
-      selectedItemColor: AppColors.primaryOrange,
-      unselectedItemColor: AppColors.textLight,
-      onTap: _onItemTapped,
-      type: BottomNavigationBarType.fixed,
-      showSelectedLabels: true,
-      showUnselectedLabels: true,
-    );
+    if (_isGuest) {
+      return BottomNavigationBar(
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Maps'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Events'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        ],
+        currentIndex: _selectedIndex,
+        selectedItemColor: AppColors.primaryOrange,
+        unselectedItemColor: AppColors.textLight,
+        onTap: _onItemTapped,
+        type: BottomNavigationBarType.fixed,
+        showSelectedLabels: true,
+        showUnselectedLabels: true,
+      );
+    } else {
+      return BottomNavigationBar(
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Maps'),
+          BottomNavigationBarItem(icon: Icon(Icons.luggage), label: 'Trips'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Calendar'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        ],
+        currentIndex: _selectedIndex,
+        selectedItemColor: AppColors.primaryOrange,
+        unselectedItemColor: AppColors.textLight,
+        onTap: _onItemTapped,
+        type: BottomNavigationBarType.fixed,
+        showSelectedLabels: true,
+        showUnselectedLabels: true,
+      );
+    }
   }
 }
 

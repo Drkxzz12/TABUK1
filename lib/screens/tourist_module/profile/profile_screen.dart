@@ -44,19 +44,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
       } else {
         // Redirect to login if user is not authenticated
         if (mounted && ModalRoute.of(context)?.isCurrent == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Signed out successfully.'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (context) => const LoginScreen()),
-            (route) => false,
-          );
+          // Use addPostFrameCallback to ensure context is valid after async gap
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Signed out successfully.'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const LoginScreen()),
+              (route) => false,
+            );
+          });
         }
       }
     });
@@ -169,12 +173,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             TextButton(
               onPressed: () async {
                 await AuthService.signOut();
-                if (context.mounted) {
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (context) => const LoginScreen()),
-                    (route) => false,
-                  );
+                if (mounted) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (context) => const LoginScreen()),
+                      (route) => false,
+                    );
+                  });
                 }
               },
               child: const Text('Sign Out'),
@@ -302,12 +309,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               onPressed: () async {
                 await AuthService.signOut();
-                if (context.mounted) {
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (context) => const LoginScreen()),
-                    (route) => false,
-                  );
+                if (mounted) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (context) => const LoginScreen()),
+                      (route) => false,
+                    );
+                  });
                 }
               },
             ),

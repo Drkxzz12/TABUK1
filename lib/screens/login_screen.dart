@@ -19,7 +19,7 @@
   import 'package:capstone_app/widgets/custom_button.dart';
   import 'package:capstone_app/screens/sign_up_screen.dart';
   import 'package:capstone_app/services/auth_service.dart';
-  import 'package:capstone_app/services/andriod_web_connectivity_service.dart';
+import 'package:capstone_app/services/connectivity_service.dart';
   import 'package:capstone_app/screens/tourist_module/registration_gate.dart';
   import 'package:capstone_app/screens/tourist_module/main_tourist_screen.dart';
   import 'package:capstone_app/services/google_verification_helper.dart';
@@ -96,7 +96,8 @@
 
     /// Checks for an active internet connection.
     Future<bool> _checkInternetConnection() async {
-      final isOnline = await WebConnectivityService.isOnline();
+      final info = await ConnectivityService().checkConnection();
+      final isOnline = info.status == ConnectionStatus.connected;
       if (!isOnline && mounted) {
         _showSnackBar(AppConstants.noInternetMessage, AppColors.errorRed);
       }

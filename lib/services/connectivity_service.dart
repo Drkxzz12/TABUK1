@@ -5,6 +5,9 @@
 
 import 'dart:async';
 import 'dart:io';
+// Only import dart:html on web
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 import 'package:flutter/foundation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:capstone_app/utils/constants.dart';
@@ -90,28 +93,15 @@ class ConnectivityService {
 
     try {
       if (kIsWeb) {
-        // Web: use browser's online status
-        try {
-          // ignore: undefined_prefixed_name, avoid_web_libraries_in_flutter
-          final online = ("window" as dynamic).navigator.onLine ?? false;
-          final info = ConnectivityInfo(
-            status:
-                online ? ConnectionStatus.connected : ConnectionStatus.noInternet,
-            connectionType:
-                online ? ConnectivityResult.wifi : ConnectivityResult.none,
-            message: online ? AppConstants.connectivityConnected : AppConstants.connectivityNoInternet,
-          );
-          _emitStatus(info);
-          return info;
-        } catch (_) {
-          final info = ConnectivityInfo(
-            status: ConnectionStatus.noInternet,
-            connectionType: ConnectivityResult.none,
-            message: AppConstants.connectivityNoInternet,
-          );
-          _emitStatus(info);
-          return info;
-        }
+        // Web: use browser's online status via dart:html
+        final online = html.window.navigator.onLine ?? false;
+        final info = ConnectivityInfo(
+          status: online ? ConnectionStatus.connected : ConnectionStatus.noInternet,
+          connectionType: online ? ConnectivityResult.wifi : ConnectivityResult.none,
+          message: online ? AppConstants.connectivityConnected : AppConstants.connectivityNoInternet,
+        );
+        _emitStatus(info);
+        return info;
       }
 
       final connectivityResult = await Connectivity().checkConnectivity();

@@ -9,7 +9,7 @@ import 'package:capstone_app/utils/constants.dart';
 import 'package:capstone_app/widgets/custom_text_field.dart';
 import 'package:capstone_app/widgets/custom_button.dart';
 import 'package:capstone_app/services/auth_service.dart';
-import 'package:capstone_app/services/andriod_web_connectivity_service.dart';
+import 'package:capstone_app/services/connectivity_service.dart';
 import 'package:capstone_app/screens/tourist_module/registration_gate.dart';
 
 /// Sign up screen for new user registration.
@@ -95,7 +95,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   /// Checks for an active internet connection.
   Future<bool> _checkInternetConnection() async {
-    return WebConnectivityService.isOnline();
+    final info = await ConnectivityService().checkConnection();
+    return info.status == ConnectionStatus.connected;
   }
 
   /// Handles the email sign up process.
