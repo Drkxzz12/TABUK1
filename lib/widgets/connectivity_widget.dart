@@ -4,9 +4,10 @@
 // Widget for displaying connectivity status to the user.
 
 import 'package:flutter/material.dart';
+import 'package:capstone_app/models/connectivity_info.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:capstone_app/utils/colors.dart';
-import 'package:capstone_app/services/connectivity_service.dart';
+// ...existing code...
 
 /// Widget that shows the current connectivity status.
 class ConnectivityStatusIndicator extends StatelessWidget {

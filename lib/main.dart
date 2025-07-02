@@ -12,6 +12,7 @@ import 'firebase_options.dart';
 import 'dart:async';
 import 'screens/splash_screen.dart';
 import 'services/connectivity_service.dart';
+import 'package:capstone_app/models/connectivity_info.dart';
 import 'package:capstone_app/utils/constants.dart';
 
 void main() async {

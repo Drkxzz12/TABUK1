@@ -4,7 +4,8 @@
   // Login screen for user authentication (email, Google, etc.).
 
 
-  import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:capstone_app/models/connectivity_info.dart';
   import 'package:flutter/foundation.dart' show kIsWeb;
   import 'package:cloud_firestore/cloud_firestore.dart';
   import 'package:firebase_auth/firebase_auth.dart';

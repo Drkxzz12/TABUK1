@@ -4,6 +4,8 @@
 // Splash screen with connectivity check and navigation to login.
 
 import 'package:flutter/material.dart';
+import 'package:capstone_app/models/connectivity_info.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:capstone_app/utils/colors.dart';
 import 'package:capstone_app/utils/constants.dart';
 import 'package:capstone_app/screens/login_screen.dart';
@@ -23,10 +25,14 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen> {
   final ConnectivityService _connectivityService = ConnectivityService();
   StreamSubscription<ConnectivityInfo>? _connectivitySubscription;
-  ConnectivityInfo _currentConnectivityInfo = const ConnectivityInfo(
+  ConnectivityInfo _currentConnectivityInfo = ConnectivityInfo(
     status: ConnectionStatus.checking,
+    connectionType: ConnectivityResult.none,
     message: AppConstants.connectivityChecking,
   );
+
+// Add import for ConnectivityResult
+
   bool _isNavigating = false;
 
   @override

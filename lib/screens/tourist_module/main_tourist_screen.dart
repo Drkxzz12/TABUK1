@@ -23,8 +23,11 @@ class _MainTouristScreenState extends State<MainTouristScreen> {
 
   // List of screens for navigation
   List<Widget> get _screens {
+    if (_userRole == null) {
+      // Show loading until role is fetched
+      return [const Center(child: CircularProgressIndicator())];
+    }
     if (_isGuest) {
-      // Allow access to Map, Events, and Profile for guests
       return [
         const MapScreen(),
         const EventCalendarScreen(),
@@ -36,9 +39,7 @@ class _MainTouristScreenState extends State<MainTouristScreen> {
         const MapScreen(),
         const TripsScreen(),
         const EventCalendarScreen(),
-        _userRole == null
-            ? const Center(child: CircularProgressIndicator())
-            : const ProfileScreen(),
+        const ProfileScreen(),
       ];
     }
   }
@@ -81,6 +82,12 @@ Future<void> _fetchUserRole() async {
 
   @override
   Widget build(BuildContext context) {
+    // Prevent navigation bar from showing until role is loaded
+    if (_userRole == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
     return Scaffold(
       body: _screens[_selectedIndex],
       bottomNavigationBar: _buildBottomNavBar(),
@@ -88,6 +95,9 @@ Future<void> _fetchUserRole() async {
   }
 
   Widget _buildBottomNavBar() {
+    if (_userRole == null) {
+      return const SizedBox.shrink();
+    }
     if (_isGuest) {
       return BottomNavigationBar(
         items: const [

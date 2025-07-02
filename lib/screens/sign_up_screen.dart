@@ -4,6 +4,7 @@
 // Sign up screen for new user registration.
 
 import 'package:flutter/material.dart';
+import 'package:capstone_app/models/connectivity_info.dart';
 import 'package:capstone_app/utils/colors.dart';
 import 'package:capstone_app/utils/constants.dart';
 import 'package:capstone_app/widgets/custom_text_field.dart';

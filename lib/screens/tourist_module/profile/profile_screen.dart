@@ -1,19 +1,19 @@
 // ===========================================
 // lib/screens/tourist_module/profile/profile_screen.dart
 // ===========================================
-// Profile screen with proper auth state handling
+// Profile screen with proper auth state handling and guest restrictions
 
 import 'package:flutter/material.dart';
 import 'package:capstone_app/services/auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Add this import
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../login_screen.dart';
 import '../../../utils/constants.dart';
 import '../../../utils/colors.dart';
 import '../../../models/users.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
-import 'dart:async'; // Add this import
+import 'dart:async';
 
 /// Profile screen for the tourist user.
 class ProfileScreen extends StatefulWidget {
@@ -28,6 +28,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _loading = true;
   String? _error;
   StreamSubscription<User?>? _authStateSubscription;
+  
+  // Check if current user is a guest
+  bool get _isGuest => userProfile?.role.toLowerCase() == 'guest';
 
   @override
   void initState() {
@@ -38,7 +41,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _initializeProfile() {
     // Listen to auth state changes
     _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen((User? user) {
-      debugPrint('Auth state changed: \\${user?.uid}');
+      debugPrint('Auth state changed: ${user?.uid}');
       if (user != null) {
         _fetchUserProfile();
       } else {
@@ -254,7 +257,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                color: AppColors.primaryTeal.withOpacity(0.1),
+                color: _isGuest 
+                    ? Colors.orange.withOpacity(0.1)
+                    : AppColors.primaryTeal.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
@@ -263,42 +268,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     : 'No role set',
                 style: TextStyle(
                   fontSize: 14,
-                  color: AppColors.primaryTeal,
+                  color: _isGuest ? Colors.orange : AppColors.primaryTeal,
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ),
             const SizedBox(height: 24),
             
-            // Edit Profile Button
-            ElevatedButton.icon(
-              icon: const Icon(Icons.person),
-              label: const Text('View/Edit Profile'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryTeal,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            // Show Edit Profile button only for non-guest users
+            if (!_isGuest) ...[
+              ElevatedButton.icon(
+                icon: const Icon(Icons.edit),
+                label: const Text('Edit Profile'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryTeal,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+                onPressed: () async {
+                  final result = await showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: AppColors.cardBackground,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                    ),
+                    builder: (context) => EditProfileSheet(userProfile: userProfile!),
+                  );
+                  
+                  // Refresh profile after editing
+                  if (result == true) {
+                    _fetchUserProfile();
+                  }
+                },
               ),
-              onPressed: () async {
-                final result = await showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: AppColors.cardBackground,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                  ),
-                  builder: (context) => EditProfileSheet(userProfile: userProfile!),
-                );
-                
-                // Refresh profile after editing
-                if (result == true) {
-                  _fetchUserProfile();
-                }
-              },
-            ),
+            ],
             const SizedBox(height: 16),
             
-            // Sign Out Button
+            // Sign Out Button (available for all users)
             ElevatedButton.icon(
               icon: const Icon(Icons.logout),
               label: const Text(AppConstants.signOut),
@@ -328,7 +335,126 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-// ================= EditProfileSheet =================
+// ================= ViewOnlyProfileSheet for Guests =================
+class ViewOnlyProfileSheet extends StatelessWidget {
+  final UserProfile userProfile;
+  
+  const ViewOnlyProfileSheet({super.key, required this.userProfile});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Center(
+            child: Text(
+              'Profile Information',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(height: 24),
+          
+          Center(
+            child: CircleAvatar(
+              radius: 40,
+              backgroundColor: AppColors.imagePlaceholder,
+              backgroundImage: userProfile.profilePhoto.isNotEmpty
+                  ? NetworkImage(userProfile.profilePhoto)
+                  : null,
+              child: userProfile.profilePhoto.isEmpty
+                  ? const Icon(Icons.person, size: 40, color: AppColors.textLight)
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 24),
+          
+          _buildInfoRow(Icons.person, 'Name', userProfile.name.isNotEmpty ? userProfile.name : 'Not set'),
+          const SizedBox(height: 16),
+          _buildInfoRow(Icons.email, 'Email', userProfile.email.isNotEmpty ? userProfile.email : 'Not set'),
+          const SizedBox(height: 16),
+          _buildInfoRow(Icons.admin_panel_settings, 'Role', userProfile.role.isNotEmpty ? userProfile.role : 'Not set'),
+          const SizedBox(height: 24),
+          
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.lock_outline, color: Colors.orange[700], size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'This profile is view-only for guest users. Create a full account to edit your information.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.orange[700],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.grey[600],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 20, color: AppColors.textLight),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textLight,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ================= EditProfileSheet (unchanged for regular users) =================
 class EditProfileSheet extends StatefulWidget {
   final UserProfile userProfile;
   
@@ -394,7 +520,6 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
       final updatedProfile = widget.userProfile.copyWith(
         name: _nameController.text.trim(),
         email: _emailController.text.trim(),
-        municipality: _municipalityController.text.trim(),
         profilePhoto: _profilePhotoController.text.trim(),
       );
       
@@ -427,7 +552,6 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
-    _municipalityController.dispose();
     _profilePhotoController.dispose();
     super.dispose();
   }
