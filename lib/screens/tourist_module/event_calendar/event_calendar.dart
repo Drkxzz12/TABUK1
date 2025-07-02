@@ -21,13 +21,7 @@ class _EventCalendarScreenState extends State<EventCalendarScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(AppConstants.events),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none),
-            onPressed: () {},
-            tooltip: AppConstants.notifications,
-          ),
-        ],
+        
         elevation: 0,
         backgroundColor: AppColors.backgroundColor,
         iconTheme: const IconThemeData(color: AppColors.textDark),

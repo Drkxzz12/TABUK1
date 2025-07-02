@@ -15,7 +15,7 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'dart:async';
 
-/// Profile screen for the tourist user.
+/// Profile screen for the tourist user.  
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -531,14 +531,19 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
       if (mounted) {
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully!')),
+          
+          const SnackBar(content: Text('Profile updated successfully!'),
+          backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
       debugPrint('Error saving profile: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving profile: $e')),
+        
+          SnackBar(content: Text('Error saving profile: $e'),
+          backgroundColor: Colors.red,),
         );
       }
     } finally {
