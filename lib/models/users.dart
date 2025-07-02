@@ -15,17 +15,10 @@ class UserProfile {
   final String email;
   /// Password (should be securely stored/hashed in production).
   final String password;
-  /// Municipality of the user.
-  final String municipality;
-  /// Status of the user (e.g., active, inactive).
-  final String status;
   /// Profile photo URL.
   final String profilePhoto;
   /// Date and time when the profile was created.
   final DateTime createdAt;
-  /// List of image URLs for the tourist (profile, gallery, etc.).
-  final List<String> images;
-
   /// Creates a [UserProfile] instance.
   const UserProfile({
     required this.userId,
@@ -33,11 +26,10 @@ class UserProfile {
     required this.name,
     required this.email,
     required this.password,
-    required this.municipality,
-    required this.status,
+  
     required this.profilePhoto,
     required this.createdAt,
-    required this.images,
+
   });
 
   /// Creates a [UserProfile] from a map (e.g., from Firestore).
@@ -91,24 +83,16 @@ class UserProfile {
     } else {
       createdAt = DateTime.now();
     }
-    
-    // Handle images array
-    List<String> images = [];
-    if (map['images'] != null && map['images'] is List) {
-      images = List<String>.from(map['images']);
-    }
-    
+  
     return UserProfile(
       userId: documentId, // Use the document ID as the user ID
       role: map['role']?.toString() ?? '',
       name: name,
       email: map['email']?.toString() ?? '',
       password: map['password']?.toString() ?? '',
-      municipality: map['municipality']?.toString() ?? '',
-      status: map['status']?.toString() ?? '',
       profilePhoto: profilePhoto,
       createdAt: createdAt,
-      images: images,
+      
     );
   }
 
@@ -120,11 +104,8 @@ class UserProfile {
       'name': name,
       'email': email,
       'password': password,
-      'municipality': municipality,
-      'status': status,
       'profile_photo': profilePhoto,
       'created_at': createdAt.toIso8601String(),
-      'images': images,
     };
   }
   
@@ -135,11 +116,9 @@ class UserProfile {
     String? name,
     String? email,
     String? password,
-    String? municipality,
-    String? status,
     String? profilePhoto,
     DateTime? createdAt,
-    List<String>? images,
+
   }) {
     return UserProfile(
       userId: userId ?? this.userId,
@@ -147,11 +126,9 @@ class UserProfile {
       name: name ?? this.name,
       email: email ?? this.email,
       password: password ?? this.password,
-      municipality: municipality ?? this.municipality,
-      status: status ?? this.status,
+ 
       profilePhoto: profilePhoto ?? this.profilePhoto,
       createdAt: createdAt ?? this.createdAt,
-      images: images ?? this.images,
     );
   }
 }

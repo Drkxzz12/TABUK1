@@ -342,7 +342,6 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
   late TextEditingController _emailController;
-  late TextEditingController _municipalityController;
   late TextEditingController _profilePhotoController;
   XFile? _pickedImage;
   final ImagePicker _picker = ImagePicker();
@@ -353,7 +352,6 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
     super.initState();
     _nameController = TextEditingController(text: widget.userProfile.name);
     _emailController = TextEditingController(text: widget.userProfile.email);
-    _municipalityController = TextEditingController(text: widget.userProfile.municipality);
     _profilePhotoController = TextEditingController(text: widget.userProfile.profilePhoto);
   }
 
@@ -516,32 +514,6 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
                   }
                   if (!value.contains('@')) {
                     return 'Please enter a valid email';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              
-              TextFormField(
-                controller: _municipalityController,
-                decoration: const InputDecoration(
-                  labelText: 'Municipality',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.location_city),
-                ),
-              ),
-              const SizedBox(height: 16),
-              
-              TextFormField(
-                controller: _profilePhotoController,
-                decoration: const InputDecoration(
-                  labelText: 'Profile Photo URL',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.image),
-                ),
-                validator: (value) {
-                  if (value != null && value.trim().isNotEmpty && !value.startsWith('http')) {
-                    return 'Please enter a valid URL';
                   }
                   return null;
                 },
