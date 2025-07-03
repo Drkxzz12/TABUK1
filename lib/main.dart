@@ -114,10 +114,16 @@ class _TabukRootState extends State<TabukRoot> with WidgetsBindingObserver {
       navigatorKey: _navigatorKey,
       title: AppConstants.appName,
       theme: ThemeData(primarySwatch: Colors.orange, fontFamily: 'Roboto'),
-      home: const SplashScreen(),
-      routes: {AppConstants.splashRoute: (context) => const SplashScreen()},
+      initialRoute: AppConstants.splashRoute,
       onGenerateRoute: (settings) {
         _currentRouteName = settings.name;
+        if (settings.name == AppConstants.splashRoute) {
+          return MaterialPageRoute(
+            builder: (_) => const SplashScreen(),
+            settings: settings,
+          );
+        }
+        // Add more routes here as needed
         return null; // Let the default routing handle it
       },
       debugShowCheckedModeBanner: false,

@@ -16,6 +16,7 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   GoogleMapController? _mapController;
+  final Completer<GoogleMapController> _controller = Completer();
   MapType _currentMapType = MapType.normal;
   bool _isMapLoading = true;
   bool _locationPermissionGranted = false;
@@ -126,8 +127,12 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void dispose() {
     _hotspotSubscription?.cancel();
-    _mapController?.dispose();
     _searchController.dispose();
+    
+    // Don't manually dispose the map controller on web
+    // The GoogleMap widget handles its own disposal
+    _mapController = null;
+    
     super.dispose();
   }
 
@@ -207,18 +212,26 @@ class _MapScreenState extends State<MapScreen> {
 
   void _onMapCreated(GoogleMapController controller) {
     if (!mounted) return;
+
+    _mapController = controller;
+    _controller.complete(controller);
     
     setState(() {
-      _mapController = controller;
       _isMapLoading = false;
     });
-    
-    // Apply map style after a short delay to ensure controller is ready
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (mounted && _mapController != null) {
-        _mapController!.setMapStyle(AppConstants.kMapStyle);
-      }
-    });
+
+    // Only set map style if non-empty and valid
+    if (AppConstants.kMapStyle.trim().isNotEmpty) {
+      Future.delayed(const Duration(milliseconds: 100), () async {
+        if (mounted && _mapController != null) {
+          try {
+            await _mapController!.setMapStyle(AppConstants.kMapStyle);
+          } catch (e) {
+            debugPrint('Map style error: $e');
+          }
+        }
+      });
+    }
   }
 
   bool _isLocationInBukidnon(LatLng location) {
@@ -273,11 +286,15 @@ class _MapScreenState extends State<MapScreen> {
         return;
       }
 
-      await _mapController?.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(target: userLocation, zoom: AppConstants.kLocationZoom),
-        ),
-      );
+      // Use the controller from the completer only if still mounted
+      if (mounted && _controller.isCompleted) {
+        final GoogleMapController controller = await _controller.future;
+        await controller.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(target: userLocation, zoom: AppConstants.kLocationZoom),
+          ),
+        );
+      }
     } catch (e) {
       debugPrint('Error getting location: $e');
       if (mounted) {
@@ -323,11 +340,18 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _goToBukidnonCenter() async {
-    await _mapController?.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(target: bukidnonCenter, zoom: AppConstants.kInitialZoom),
-      ),
-    );
+    try {
+      if (mounted && _controller.isCompleted) {
+        final GoogleMapController controller = await _controller.future;
+        await controller.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(target: bukidnonCenter, zoom: AppConstants.kInitialZoom),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error going to Bukidnon center: $e');
+    }
   }
 
   void _showLocationOutOfBoundsDialog() {
@@ -598,7 +622,6 @@ class _MapScreenState extends State<MapScreen> {
       ),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
