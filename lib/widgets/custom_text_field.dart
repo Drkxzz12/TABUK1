@@ -17,6 +17,8 @@ class CustomTextField extends StatelessWidget {
   final bool obscureText;
   /// Callback for when the text changes.
   final ValueChanged<String>? onChanged;
+  /// Validator for form field usage.
+  final String? Function(String?)? validator;
   /// Optional suffix icon widget.
   final Widget? suffixIcon;
   /// The keyboard type for the text field.
@@ -31,17 +33,17 @@ class CustomTextField extends StatelessWidget {
     this.onChanged,
     this.suffixIcon,
     this.keyboardType,
+    this.validator,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.white, // Use a valid color from AppColors
+        color: AppColors.white,
         borderRadius: BorderRadius.circular(AppConstants.textFieldBorderRadius),
         boxShadow: [
           BoxShadow(
-            // ignore: deprecated_member_use
             color: Colors.grey.withOpacity(0.1),
             spreadRadius: 1,
             blurRadius: 4,
@@ -49,10 +51,11 @@ class CustomTextField extends StatelessWidget {
           ),
         ],
       ),
-      child: TextField(
+      child: TextFormField(
         controller: controller,
         obscureText: obscureText,
         keyboardType: keyboardType,
+        validator: validator,
         decoration: InputDecoration(
           hintText: hintText,
           hintStyle: TextStyle(color: AppColors.textLight, fontSize: AppConstants.textFieldFontSize),
@@ -64,7 +67,7 @@ class CustomTextField extends StatelessWidget {
             horizontal: AppConstants.textFieldHorizontalPadding,
             vertical: AppConstants.textFieldVerticalPadding,
           ),
-          suffixIcon: suffixIcon, // <-- Use the passed-in suffixIcon!
+          suffixIcon: suffixIcon,
         ),
         onChanged: onChanged,
       ),

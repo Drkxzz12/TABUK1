@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 // ===========================================
 // lib/utils/constants.dart
 // ===========================================
@@ -6,6 +7,28 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class AppConstants {
+  // Sign Up Screen Roles
+  static const String roleBusinessOwner = 'Business Owner';
+  static const String roleTourist = 'Tourist';
+  static const String roleAdministrator = 'Administrator';
+  static const List<String> signUpRoles = [
+    roleBusinessOwner,
+    roleTourist,
+    roleAdministrator,
+  ];
+
+  // Sign Up Screen UI constants
+  static const double signUpLabelFontSize = 14.0;
+  static const double signUpFieldErrorFontSize = 12.0;
+  static const double signUpFieldErrorLeftPadding = 12.0;
+  static const double signUpFieldErrorTopPadding = 2.0;
+  static const double signUpFormLabelLeftPadding = 4.0;
+  static const double signUpFormLabelBottomPadding = 8.0;
+  static const double signUpFormPromptSpacing = 4.0;
+  static const int signUpPromptFontWeight = 600;
+  static const double signUpPromptFontSize = 12.0;
+  static const int signUpPromptColorARGB = 0xFF4297FF; // Color.fromARGB(255, 66, 151, 255)
+  static const Color signUpPromptColor = Color(signUpPromptColorARGB);
   // App General
   static const String appName = 'TABUK';
 
@@ -181,11 +204,9 @@ class AppConstants {
   static const double signUpLogoBorderRadius = 16;
   static const double signUpLogoIconSize = 40;
   static const double signUpLogoTextFontSize = 14;
-  static const double signUpFieldErrorFontSize = 12;
-  static const double signUpFieldErrorLeftPadding = 12;
-  static const double signUpFieldErrorTopPadding = 2;
+  // Removed duplicate signUpFieldErrorFontSize, signUpFieldErrorLeftPadding, signUpFieldErrorTopPadding
   static const double signUpFormTopSpacing = 50;
-  static const double signUpFormSectionSpacing = 8;
+  static const double signUpFormSectionSpacing = 18;
   static const double signUpFormButtonSpacing = 32;
 
   // Google button constants
@@ -265,8 +286,8 @@ class AppConstants {
   // Add missing authentication and validation constants
   static const String emailRequired = 'Email is required';
   static const String emailRequiredError = 'Email is required';
-  static const String emailRegexPattern = r'^\S+@\S+\.\S+ 0';
-  static const String emailRegex = r'^\S+@\S+\.\S+ 0';
+  static const String emailRegexPattern = r'^[\w\.-]+@([\w\-]+\.)+[A-Za-z]{2,}$';
+  static const String emailRegex = r'^[\w\.-]+@([\w\-]+\.)+[A-Za-z]{2,}$';
   static const String invalidEmailMessage = 'Invalid email address';
   static const String invalidEmailError = 'Invalid email address';
   static const String passwordRequired = 'Password is required';

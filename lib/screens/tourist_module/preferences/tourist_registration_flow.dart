@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:capstone_app/utils/colors.dart';
 import 'package:capstone_app/utils/constants.dart';
 import 'package:capstone_app/screens/tourist_module/main_tourist_screen.dart';
@@ -36,6 +37,7 @@ class _TouristRegistrationFlowState extends State<TouristRegistrationFlow> {
   String username = '';
   File? profileImage;
   String? uploadedProfileImageUrl;
+  XFile? webProfileImage;
 
   // Preference data
   String selectedEventRecommendation = '';
@@ -129,10 +131,15 @@ class _TouristRegistrationFlowState extends State<TouristRegistrationFlow> {
         maxHeight: _maxImageSize.toDouble(),
         imageQuality: _imageQuality,
       );
-      
       if (image != null && mounted) {
         setState(() {
-          profileImage = File(image.path);
+          if (kIsWeb) {
+            webProfileImage = image;
+            profileImage = null;
+          } else {
+            profileImage = File(image.path);
+            webProfileImage = null;
+          }
         });
       }
     } catch (e) {
@@ -176,22 +183,27 @@ class _TouristRegistrationFlowState extends State<TouristRegistrationFlow> {
                     _pickImageFromGallery();
                   },
                 ),
-                _buildImageSourceOption(
-                  icon: Icons.camera_alt,
-                  label: 'Camera',
-                  onTap: () {
-                    Navigator.pop(context);
-                    _pickImageFromCamera();
-                  },
-                ),
-                if (profileImage != null)
+                if (!kIsWeb)
+                  _buildImageSourceOption(
+                    icon: Icons.camera_alt,
+                    label: 'Camera',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _pickImageFromCamera();
+                    },
+                  ),
+                if ((kIsWeb && webProfileImage != null) || (!kIsWeb && profileImage != null))
                   _buildImageSourceOption(
                     icon: Icons.delete,
                     label: 'Remove',
                     onTap: () {
                       Navigator.pop(context);
                       setState(() {
-                        profileImage = null;
+                        if (kIsWeb) {
+                          webProfileImage = null;
+                        } else {
+                          profileImage = null;
+                        }
                       });
                     },
                   ),
@@ -266,7 +278,7 @@ class _TouristRegistrationFlowState extends State<TouristRegistrationFlow> {
           _showErrorSnackBar('Username must be at least $_minUsernameLength characters long');
           return false;
         }
-        if (profileImage == null && (uploadedProfileImageUrl == null || uploadedProfileImageUrl!.isEmpty)) {
+        if ((profileImage == null && webProfileImage == null) && (uploadedProfileImageUrl == null || uploadedProfileImageUrl!.isEmpty)) {
           _showErrorSnackBar('Please select a profile image');
           return false;
         }
@@ -342,14 +354,19 @@ class _TouristRegistrationFlowState extends State<TouristRegistrationFlow> {
   }
 
   // Image upload
-  Future<String?> _uploadImageToImgbb(File imageFile) async {
+  Future<String?> _uploadImageToImgbb(dynamic imageFileOrXFile) async {
     try {
       final url = Uri.parse('https://api.imgbb.com/1/upload?key=$_imgbbApiKey');
-      final bytes = await imageFile.readAsBytes();
+      List<int> bytes;
+      if (kIsWeb && imageFileOrXFile is XFile) {
+        bytes = await imageFileOrXFile.readAsBytes();
+      } else if (imageFileOrXFile is File) {
+        bytes = await imageFileOrXFile.readAsBytes();
+      } else {
+        throw Exception('Invalid image type');
+      }
       final base64Image = base64Encode(bytes);
-      
       final response = await http.post(url, body: {'image': base64Image});
-      
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data['data']['url'] as String?;
@@ -419,8 +436,9 @@ class _TouristRegistrationFlowState extends State<TouristRegistrationFlow> {
 
     try {
       // Upload image if exists and not already uploaded
-      if (profileImage != null && (uploadedProfileImageUrl == null || uploadedProfileImageUrl!.isEmpty)) {
-        uploadedProfileImageUrl = await _uploadImageToImgbb(profileImage!);
+      if ((profileImage != null || webProfileImage != null) && (uploadedProfileImageUrl == null || uploadedProfileImageUrl!.isEmpty)) {
+        final imageToUpload = kIsWeb ? webProfileImage : profileImage;
+        uploadedProfileImageUrl = await _uploadImageToImgbb(imageToUpload);
         if (uploadedProfileImageUrl == null || uploadedProfileImageUrl!.isEmpty) {
           _showErrorSnackBar('Failed to upload profile image. Please try again.');
           setState(() { _isLoading = false; });
@@ -494,6 +512,14 @@ class _TouristRegistrationFlowState extends State<TouristRegistrationFlow> {
   }
 
   Widget _buildProfileImageSection() {
+    ImageProvider? imageProvider;
+    if (kIsWeb && webProfileImage != null) {
+      imageProvider = NetworkImage(webProfileImage!.path);
+    } else if (!kIsWeb && profileImage != null) {
+      imageProvider = FileImage(profileImage!);
+    } else if (uploadedProfileImageUrl != null && uploadedProfileImageUrl!.isNotEmpty) {
+      imageProvider = NetworkImage(uploadedProfileImageUrl!);
+    }
     return Center(
       child: GestureDetector(
         onTap: _showImageSourceDialog,
@@ -502,8 +528,8 @@ class _TouristRegistrationFlowState extends State<TouristRegistrationFlow> {
             CircleAvatar(
               radius: 50,
               backgroundColor: Colors.grey[200],
-              backgroundImage: profileImage != null ? FileImage(profileImage!) : null,
-              child: profileImage == null
+              backgroundImage: imageProvider,
+              child: imageProvider == null
                   ? Icon(Icons.person, size: 50, color: Colors.grey[400])
                   : null,
             ),

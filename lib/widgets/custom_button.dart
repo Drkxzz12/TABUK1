@@ -12,7 +12,7 @@ class CustomButton extends StatelessWidget {
   /// The button label text.
   final String text;
   /// The callback when the button is pressed.
-  final VoidCallback onPressed;
+  final void Function()? onPressed;
 
   /// Creates a [CustomButton].
   const CustomButton({super.key, required this.text, required this.onPressed});

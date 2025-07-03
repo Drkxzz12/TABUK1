@@ -20,6 +20,7 @@ class _MainTouristScreenState extends State<MainTouristScreen> {
   int _selectedIndex = 0;
   String? _userRole; // Assume this is fetched from somewhere
   bool get _isGuest => _userRole?.toLowerCase() == 'guest';
+  bool _roleDialogShown = false;
 
   // List of screens for navigation
   List<Widget> get _screens {
@@ -45,19 +46,57 @@ class _MainTouristScreenState extends State<MainTouristScreen> {
   }
 
   @override
-void initState() {
-  super.initState();
-  _fetchUserRole();
-}
+  void initState() {
+    super.initState();
+    _fetchUserRole();
+  }
 
-Future<void> _fetchUserRole() async {
-  final user = AuthService.currentUser;
-  if (user == null) return;
-  final doc = await FirebaseFirestore.instance.collection('Users').doc(user.uid).get();
-  setState(() {
-    _userRole = doc.data()?['role'];
-  });
-}
+  Future<void> _fetchUserRole() async {
+    final user = AuthService.currentUser;
+    if (user == null) return;
+    final doc = await FirebaseFirestore.instance.collection('Users').doc(user.uid).get();
+    final role = doc.data()?['role'];
+    setState(() {
+      _userRole = role;
+    });
+    // If no role, show role selection dialog (only once)
+    if ((role == null || (role is String && role.isEmpty)) && !_roleDialogShown) {
+      _roleDialogShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showRoleSelectionDialog(user.uid);
+      });
+    }
+  }
+
+  void _showRoleSelectionDialog(String uid) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => _RoleSelectionDialog(
+        onRoleSelected: (role) async {
+          await AuthService.storeUserData(
+            uid,
+            AuthService.currentUser?.email ?? '',
+            role,
+          );
+          if (!mounted) return;
+          setState(() {
+            _userRole = role;
+          });
+          if (!mounted) return;
+          Navigator.of(dialogContext).pop();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Role set to $role!'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        },
+      ),
+    );
+  }
 
   void _onItemTapped(int index) {
     // Restrict guest navigation to only allowed tabs
@@ -131,6 +170,56 @@ Future<void> _fetchUserRole() async {
         showUnselectedLabels: true,
       );
     }
+  }
+}
+
+class _RoleSelectionDialog extends StatefulWidget {
+  final Function(String) onRoleSelected;
+  const _RoleSelectionDialog({required this.onRoleSelected});
+  @override
+  State<_RoleSelectionDialog> createState() => _RoleSelectionDialogState();
+}
+
+class _RoleSelectionDialogState extends State<_RoleSelectionDialog> {
+  String _selectedRole = 'Tourist';
+  static const _roles = ['Business Owner', 'Tourist', 'Administrator'];
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text(
+        'Select Your Role',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      ),
+      content: DropdownButtonFormField<String>(
+        value: _selectedRole,
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: Colors.white.withOpacity(0.8),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey.withOpacity(0.3)),
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+        items: _roles.map((role) => DropdownMenuItem(
+          value: role,
+          child: Text(role, style: const TextStyle(color: AppColors.textDark, fontSize: 14)),
+        )).toList(),
+        onChanged: (value) {
+          if (value != null) setState(() => _selectedRole = value);
+        },
+      ),
+      actions: [
+        ElevatedButton(
+          onPressed: () {
+            widget.onRoleSelected(_selectedRole);
+          },
+          child: const Text('Continue'),
+        ),
+      ],
+    );
   }
 }
 

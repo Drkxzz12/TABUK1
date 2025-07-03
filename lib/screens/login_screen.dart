@@ -152,7 +152,6 @@ import 'package:capstone_app/services/connectivity_service.dart';
     Future<void> _handleGoogleSignIn() async {
       if (!await _checkInternetConnection()) return;
       setState(() => _isLoading = true);
-      
       try {
         // Always sign out before sign-in to force account selection
         if (kIsWeb) {
@@ -160,54 +159,70 @@ import 'package:capstone_app/services/connectivity_service.dart';
         } else {
           await GoogleSignIn().signOut();
         }
-        
-        final userCredential = await AuthService.signInWithGoogle();
-        if (!mounted) return;
-        
-        final user = FirebaseAuth.instance.currentUser;
-        if (user == null) {
-          _showSnackBar('Google authentication failed. Please try again.', Colors.red);
-          debugPrint('Google sign-in: user is null');
-          return;
-        }
-        
-        final isNewUser = userCredential?.additionalUserInfo?.isNewUser ?? false;
-        final uid = user.uid;
-        
-        // Always ensure Firestore user doc exists
         try {
-          final userDoc = await FirebaseFirestore.instance.collection('Users').doc(uid).get();
-          if (!userDoc.exists) {
-            await AuthService.storeUserData(
-              uid,
-              user.email ?? '',
-              'Tourist',
-              username: user.displayName ?? '',
-              appEmailVerified: true, // Google users are pre-verified
-            );
-            debugPrint('Google sign-in: Firestore user doc created for $uid');
+          final userCredential = await AuthService.signInWithGoogle();
+          if (!mounted) return;
+          final user = FirebaseAuth.instance.currentUser;
+          if (user == null) {
+            _showSnackBar('Google authentication failed. Please try again.', Colors.red);
+            debugPrint('Google sign-in: user is null');
+            return;
           }
-        } catch (e) {
-          debugPrint('Google sign-in: error ensuring Firestore user doc: $e');
+          final isNewUser = userCredential?.additionalUserInfo?.isNewUser ?? false;
+          final uid = user.uid;
+          // Always ensure Firestore user doc exists
+          try {
+            final userDoc = await FirebaseFirestore.instance.collection('Users').doc(uid).get();
+            if (!userDoc.exists) {
+              await AuthService.storeUserData(
+                uid,
+                user.email ?? '',
+                '', // No role yet
+                username: user.displayName ?? '',
+                appEmailVerified: true, // Google users are pre-verified
+              );
+              debugPrint('Google sign-in: Firestore user doc created for $uid');
+            }
+          } catch (e) {
+            debugPrint('Google sign-in: error ensuring Firestore user doc: $e');
+          }
+          // Google verification should always pass
+          final isVerified = await GoogleVerificationHelper.handleProviderVerification(
+            uid: uid,
+            provider: 'google',
+            isNewUser: isNewUser,
+          );
+          debugPrint('Google sign-in: isVerified = $isVerified');
+          // Check if user has a role
+          final userDoc = await FirebaseFirestore.instance.collection('Users').doc(uid).get();
+          final existingRole = userDoc.data()?['role'];
+          final roleMissing = existingRole == null || (existingRole is String && existingRole.trim().isEmpty);
+          if (isVerified) {
+            if (roleMissing) {
+              // New user or no role, show role selection dialog
+              await Future.delayed(const Duration(milliseconds: 100)); // Ensure UI is ready
+              _showRoleSelectionDialog(uid);
+              _showSnackBar('Please select your role to continue.', Colors.orange);
+            } else {
+              await _handleSuccessfulAuth(uid);
+              _showSnackBar('Google sign-in successful!', Colors.green);
+            }
+          } else {
+            debugPrint('ERROR: Google user verification failed - this should not happen');
+            _showSnackBar('Google sign-in verification failed. Please try again.', Colors.red);
+          }
+        } on FirebaseAuthException catch (e) {
+          if (e.code == 'account-exists-with-different-credential') {
+            // The account already exists with a different credential
+            final pendingCred = e.credential;
+            final email = e.email;
+            _showSnackBar('This email is already registered with another sign-in method. Please login with email and password to link your Google account.', Colors.orange);
+            // Prompt for password and link
+            await _showLinkAccountDialog(email, pendingCred);
+          } else {
+            _showSnackBar('Google Sign-In failed: ${e.message}', Colors.red);
+          }
         }
-        
-        // Google verification should always pass
-        final isVerified = await GoogleVerificationHelper.handleProviderVerification(
-          uid: uid,
-          provider: 'google',
-          isNewUser: isNewUser,
-        );
-        
-        debugPrint('Google sign-in: isVerified = $isVerified');
-        
-        if (isVerified) {
-          await _handleSuccessfulAuth(uid);
-          _showSnackBar('Google sign-in successful!', Colors.green);
-        } else {
-          debugPrint('ERROR: Google user verification failed - this should not happen');
-          _showSnackBar('Google sign-in verification failed. Please try again.', Colors.red);
-        }
-        
       } catch (e) {
         if (mounted) {
           _showSnackBar('Google Sign-In failed: ${e.toString()}', Colors.red);
@@ -216,6 +231,57 @@ import 'package:capstone_app/services/connectivity_service.dart';
       } finally {
         if (mounted) setState(() => _isLoading = false);
       }
+    }
+
+    /// Dialog to prompt for password and link Google credential
+    Future<void> _showLinkAccountDialog(String? email, AuthCredential? pendingCred) async {
+      if (email == null || pendingCred == null) return;
+      String password = '';
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Link Google Account'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Enter your password for $email to link your Google account.'),
+                const SizedBox(height: 16),
+                TextField(
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Password'),
+                  onChanged: (val) => password = val,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  try {
+                    final emailUser = await AuthService.signInWithEmailPassword(email: email, password: password);
+                    if (emailUser != null) {
+                      await emailUser.user?.linkWithCredential(pendingCred);
+                      Navigator.of(dialogContext).pop();
+                      _showSnackBar('Accounts linked! You can now sign in with Google.', Colors.green);
+                      await _handleSuccessfulAuth(emailUser.user!.uid);
+                    } else {
+                      _showSnackBar('Failed to sign in with email/password.', Colors.red);
+                    }
+                  } on FirebaseAuthException catch (e) {
+                    _showSnackBar(e.message ?? 'Failed to link accounts.', Colors.red);
+                  }
+                },
+                child: const Text('Link'),
+              ),
+            ],
+          );
+        },
+      );
     }
 
     /// Show the email verification screen for email sign-in only

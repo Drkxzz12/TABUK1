@@ -11,6 +11,68 @@ import 'package:capstone_app/utils/constants.dart';
 
 /// Service for authentication and user management.
 class AuthService {
+  /// Checks if an email already exists in the database
+  static Future<bool> emailExists(String email) async {
+    try {
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('Users')
+          .where('email', isEqualTo: email.toLowerCase().trim())
+          .get();
+      return querySnapshot.docs.isNotEmpty;
+    } catch (e) {
+      debugPrint('Error checking email existence: $e');
+      return false; // Return false to allow the process to continue and let Firebase handle the error
+    }
+  }
+
+  /// Enhanced sign up method with email existence check
+  static Future<UserCredential?> enhancedSignUpWithEmailPassword({
+    required String email,
+    required String password,
+    required String role,
+  }) async {
+    try {
+      // First, check if email already exists in our database
+      final emailAlreadyExists = await emailExists(email);
+      if (emailAlreadyExists) {
+        throw FirebaseAuthException(
+          code: 'email-already-in-use',
+          message: 'An account with this email already exists.',
+        );
+      }
+
+      // Create user with Firebase Auth
+      final userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
+        email: email.toLowerCase().trim(),
+        password: password,
+      );
+
+      // Send email verification
+      await userCredential.user?.sendEmailVerification();
+
+      // Create user document in Firestore
+      await FirebaseFirestore.instance
+          .collection('Users')
+          .doc(userCredential.user?.uid)
+          .set({
+        'user_id': userCredential.user?.uid,
+        'email': email.toLowerCase().trim(),
+        'role': role,
+        'created_at': FieldValue.serverTimestamp(),
+        'app_email_verified': false,
+        'username': '', // Will be updated later
+        'name': '', // Will be updated later
+        'profile_photo': '', // Will be updated later
+        'password': '', // Never store actual password
+      });
+
+      return userCredential;
+    } catch (e) {
+      debugPrint('Error in enhancedSignUpWithEmailPassword: $e');
+      rethrow;
+    }
+  }
   static final FirebaseAuth _auth = FirebaseAuth.instance;
   static const String _emailKey = 'pending_email';
 
@@ -27,12 +89,26 @@ class AuthService {
     required String role,
   }) async {
     try {
+      // Validate email and password before making Firebase call
+      if (email.isEmpty) {
+        throw AppConstants.emailRequiredError;
+      }
+      if (!RegExp(AppConstants.emailRegex).hasMatch(email)) {
+        throw AppConstants.invalidEmailError;
+      }
+      if (password.isEmpty) {
+        throw AppConstants.passwordRequiredError;
+      }
+      if (password.length < AppConstants.minPasswordLength) {
+        throw AppConstants.passwordLengthError;
+      }
+
       UserCredential userCredential = await _auth
           .createUserWithEmailAndPassword(email: email, password: password);
 
       // Send email verification
       await userCredential.user?.sendEmailVerification();
-      debugPrint('Verification email sent to new user: {userCredential.user?.email}');
+      debugPrint('Verification email sent to new user: ${userCredential.user?.email}');
 
       // Store additional user data (like role) in Firestore
       if (userCredential.user != null) {
@@ -46,8 +122,29 @@ class AuthService {
 
       return userCredential;
     } on FirebaseAuthException catch (e) {
-      throw _handleAuthException(e);
+      // Use constants for error messages
+      if (e.code == 'email-already-in-use') {
+        throw AppConstants.authEmailAlreadyInUse;
+      } else if (e.code == 'invalid-email') {
+        throw AppConstants.authInvalidEmail;
+      } else if (e.code == 'weak-password') {
+        throw AppConstants.authWeakPassword;
+      } else if (e.code == 'network-request-failed') {
+        throw AppConstants.authNetworkRequestFailed;
+      } else if (e.code == 'too-many-requests') {
+        throw AppConstants.authTooManyRequests;
+      } else if (e.code == 'user-disabled') {
+        throw AppConstants.authUserDisabled;
+      } else if (e.code == 'operation-not-allowed') {
+        throw AppConstants.authOperationNotAllowed;
+      } else {
+        throw _handleAuthException(e);
+      }
     } catch (e) {
+      // If the error is a string from our manual validation, just throw it
+      if (e is String) {
+        rethrow;
+      }
       throw AppConstants.authUnexpectedError(e.toString());
     }
   }
@@ -168,7 +265,7 @@ class AuthService {
         await storeUserData(
           user.uid,
           user.email ?? '',
-          'Tourist', // Default role
+          '', // No role, force selection
           username: user.displayName ?? '',
           appEmailVerified: user.emailVerified,
         );
@@ -177,7 +274,7 @@ class AuthService {
         await storeUserData(
           user.uid,
           user.email ?? '',
-          'Tourist',
+          '', // No role, force selection
           username: user.displayName ?? '',
           appEmailVerified: user.emailVerified,
         );
