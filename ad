@@ -1,0 +1,12 @@
+[33me440533[m[33m ([m[1;36mHEAD[m[33m)[m HEAD@{0}: pull origin main --rebase (start): checkout e440533a74a7c47d11e8ec5c7c4cfbd487a2dde6
+[33md5b9174[m[33m ([m[1;31morigin/main[m[33m, [m[1;32mmain[m[33m)[m HEAD@{1}: commit: New ui Changes
+[33mbcc5fcb[m HEAD@{2}: commit: New UI Colors
+[33mf75e7f4[m HEAD@{3}: commit: New changes of Login and Screen
+[33m2f8185c[m HEAD@{4}: commit: New Changes
+[33m9ed9e5e[m HEAD@{5}: commit: New Changes
+[33m1dd58d8[m HEAD@{6}: commit: Initial commit
+[33mf9520f1[m HEAD@{7}: commit: Initial commit
+[33mf1eb178[m HEAD@{8}: commit (merge): Resolve merge conflicts
+[33mbf95f20[m[33m ([m[1;31morigin/master[m[33m, [m[1;32mmaster[m[33m)[m HEAD@{9}: checkout: moving from main to main
+[33mbf95f20[m[33m ([m[1;31morigin/master[m[33m, [m[1;32mmaster[m[33m)[m HEAD@{10}: checkout: moving from master to main
+[33mbf95f20[m[33m ([m[1;31morigin/master[m[33m, [m[1;32mmaster[m[33m)[m HEAD@{11}: commit (initial): Initial commit
