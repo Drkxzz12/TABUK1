@@ -36,26 +36,21 @@ class UserProfile {
   factory UserProfile.fromMap(Map<String, dynamic> map, String documentId) {
 
     
-    // Handle name - check multiple possible field names
+    // Handle name - check multiple possible field names (future-proof, but only one is needed)
     String name = '';
     if (map['name'] != null && (map['name'] as String).trim().isNotEmpty) {
       name = map['name'];
-    } else if (map['name'] != null && (map['name'] as String).trim().isNotEmpty) {
-      name = map['name'];
-    } else if (map['name'] != null && (map['name'] as String).trim().isNotEmpty) {
-      name = map['name'];
     }
-    
-    // Handle profile photo - check multiple possible field names
+
+    // Handle profile photo - prefer 'profilePhoto' (camelCase), fallback to others
     String profilePhoto = '';
-    if (map['profile_photo'] != null && (map['profile_photo'] as String).trim().isNotEmpty) {
-      profilePhoto = map['profile_photo'];
-    } else if (map['profilePhoto'] != null && (map['profilePhoto'] as String).trim().isNotEmpty) {
+    if (map['profilePhoto'] != null && (map['profilePhoto'] as String).trim().isNotEmpty) {
       profilePhoto = map['profilePhoto'];
+    } else if (map['profile_photo'] != null && (map['profile_photo'] as String).trim().isNotEmpty) {
+      profilePhoto = map['profile_photo'];
     } else if (map['profileImageUrl'] != null && (map['profileImageUrl'] as String).trim().isNotEmpty) {
       profilePhoto = map['profileImageUrl'];
     }
-    
     // Only use valid URLs, never local file paths
     if (profilePhoto.isNotEmpty && !profilePhoto.startsWith('http')) {
       profilePhoto = '';
@@ -104,7 +99,7 @@ class UserProfile {
       'name': name,
       'email': email,
       'password': password,
-      'profile_photo': profilePhoto,
+      'profilePhoto': profilePhoto, // always camelCase
       'created_at': createdAt.toIso8601String(),
     };
   }

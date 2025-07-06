@@ -4,6 +4,8 @@
   // Login screen for user authentication (email, Google, etc.).
 
 
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import 'package:capstone_app/models/connectivity_info.dart';
   import 'package:flutter/foundation.dart' show kIsWeb;

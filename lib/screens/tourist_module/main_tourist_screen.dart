@@ -68,35 +68,47 @@ class _MainTouristScreenState extends State<MainTouristScreen> {
     }
   }
 
-  void _showRoleSelectionDialog(String uid) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => _RoleSelectionDialog(
+void _showRoleSelectionDialog(String uid) {
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) {
+      return _RoleSelectionDialog(
         onRoleSelected: (role) async {
-          await AuthService.storeUserData(
-            uid,
-            AuthService.currentUser?.email ?? '',
-            role,
-          );
-          if (!mounted) return;
-          setState(() {
-            _userRole = role;
-          });
-          if (!mounted) return;
-          Navigator.of(dialogContext).pop();
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Role set to $role!'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        },
-      ),
-    );
-  }
+  final messenger = ScaffoldMessenger.of(dialogContext); // capture before await
+
+  await AuthService.storeUserData(
+    uid,
+    AuthService.currentUser?.email ?? '',
+    role,
+  );
+
+  if (!mounted) return;
+
+  setState(() {
+    _userRole = role;
+  });
+
+  if (!mounted) return;
+
+  // ignore: use_build_context_synchronously
+  Navigator.of(dialogContext).pop();
+
+  if (!mounted) return;
+
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text('Role set to $role!'),
+      backgroundColor: Colors.green,
+      duration: const Duration(seconds: 2),
+    ),
+  );
+}
+      );
+    },
+  );
+}
+
 
   void _onItemTapped(int index) {
     // Restrict guest navigation to only allowed tabs

@@ -13,12 +13,16 @@ class Event {
   final String description;
   /// Location where the event takes place.
   final String location;
-  /// Date and time of the event.
-  final DateTime date;
-  /// Date and time when the event was created.
+  /// Start startdate and time of the event.
+  final DateTime startdate;
+  /// End startdate and time of the event.
+  final DateTime? endstartDate;
+  /// startDate and time when the event was created.
   final DateTime createdAt;
-  /// Status of the event (e.g., active, cancelled).
+  /// Status of the event (e.g., active, cancelled) or duration.
   final String status;
+  /// List of image URLs for the event.
+  final List<String>? images;
 
   /// Creates an [Event] instance.
   const Event({
@@ -26,9 +30,11 @@ class Event {
     required this.title,
     required this.description,
     required this.location,
-    required this.date,
+    required this.startdate,
+    this.endstartDate,
     required this.createdAt,
     required this.status,
+    this.images,
   });
 
   /// Creates an [Event] from a map (e.g., from Firestore).
@@ -38,13 +44,21 @@ class Event {
       title: map['title'] ?? '',
       description: map['description'] ?? '',
       location: map['location'] ?? '',
-      date: map['date'] is DateTime
-          ? map['date']
-          : DateTime.tryParse(map['date'] ?? '') ?? DateTime.now(),
+      startdate: map['startdate'] is DateTime
+          ? map['startdate']
+          : DateTime.tryParse(map['startdate'] ?? '') ?? DateTime.now(),
+      endstartDate: map['end_startdate'] != null
+          ? (map['end_startdate'] is DateTime
+              ? map['end_startdate']
+              : DateTime.tryParse(map['end_startdate'] ?? ''))
+          : null,
       createdAt: map['created_at'] is DateTime
           ? map['created_at']
           : DateTime.tryParse(map['created_at'] ?? '') ?? DateTime.now(),
       status: map['status'] ?? '',
+      images: map['images'] != null
+          ? List<String>.from(map['images'] as List)
+          : [],
     );
   }
 
@@ -55,9 +69,11 @@ class Event {
       'title': title,
       'description': description,
       'location': location,
-      'date': date.toIso8601String(),
+      'startdate': startdate.toIso8601String(),
+      'end_startdate': endstartDate?.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
       'status': status,
+      'images': images ?? [],
     };
   }
 }

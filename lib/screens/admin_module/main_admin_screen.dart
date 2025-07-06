@@ -1,6 +1,7 @@
 import 'package:capstone_app/screens/admin_module/hotspots/hotspots.dart';
 import 'package:flutter/material.dart';
 import 'package:capstone_app/screens/admin_module/profile/profile_screen.dart';
+import 'package:capstone_app/screens/admin_module/events/events.dart';
 
 import 'package:capstone_app/utils/colors.dart';
 
@@ -19,7 +20,7 @@ class _MainAdminScreenState extends State<MainAdminScreen> {
   final List<Widget> _screens = [
     const _PlaceholderScreen(title: 'Dashboard'),
     HotspotsManagementScreen(),
-    const _PlaceholderScreen(title: 'Reviews'),
+    EventsManagementScreen(),
     const _PlaceholderScreen(title: 'Notifications'),
     ProfileScreen(),
   ];
@@ -51,8 +52,8 @@ class _MainAdminScreenState extends State<MainAdminScreen> {
           label: 'Hotspots',
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.rate_review),
-          label: 'Reviews',
+          icon: Icon(Icons.event),
+          label: 'Events',
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.notifications),
