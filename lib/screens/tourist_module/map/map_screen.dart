@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:ui' as ui;
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart' as geo;
@@ -23,6 +25,10 @@ class _MapScreenState extends State<MapScreen> {
   bool _isCheckingLocation = false;
   Set<Marker> _hotspotMarkers = {};
   StreamSubscription<List<Hotspot>>? _hotspotSubscription;
+  
+  // Custom marker icons
+  Map<String, BitmapDescriptor> _markerIcons = {};
+  bool _markersInitialized = false;
 
   // Search/filter state
   final TextEditingController _searchController = TextEditingController();
@@ -31,30 +37,391 @@ class _MapScreenState extends State<MapScreen> {
   bool _isSearching = false;
 
   // If AppConstants.mapCategories is not defined, define locally:
-  final List<String> _categories = ['All', 'Nature', 'Culture', 'Adventure', 'Food', 'Shopping', 'Entertainment'];
+  final List<String> _categories = [
+    'All',
+    'Natural Attraction',
+    'Cultural Site',
+    'Adventure Spot',
+    'Restaurant',
+    'Accommodation',
+    'Shopping',
+    'Entertainment',
+  ];
   final LatLng bukidnonCenter = AppConstants.bukidnonCenter;
   final LatLngBounds bukidnonBounds = AppConstants.bukidnonBounds;
 
   @override
   void initState() {
     super.initState();
+    _initializeMarkerIcons();
     _checkLocationPermission();
     _initializeHotspotStream();
+  }
+
+
+  /// Initialize category-specific styled marker icons (no default marker)
+  Future<void> _initializeMarkerIcons() async {
+    try {
+      // Backend-aligned categories
+      final Map<String, IconData> categoryIcons = {
+        'Natural Attraction': Icons.park, 
+        'Cultural Site': Icons.museum, 
+        'Adventure Spot': Icons.forest, 
+        'Restaurant': Icons.brunch_dining, 
+        'Accommodation': Icons.cottage, 
+        'Shopping': Icons.shopping_cart_checkout, 
+        'Entertainment': Icons.theater_comedy, 
+
+      };
+      final Map<String, Color> categoryColors = {
+        'Natural Attraction': Colors.green,
+        'Cultural Site': Colors.purple,
+        'Adventure Spot': Colors.orange,
+        'Restaurant': Colors.red,
+        'Accommodation': Colors.teal,
+        'Shopping': Colors.blue,
+        'Entertainment': Colors.pink,
+      };
+      for (final entry in categoryIcons.entries) {
+        final category = entry.key;
+        final icon = entry.value;
+        final color = categoryColors[category]!;
+        final bitmapDescriptor = await _createCategoryStyledMarker(category, icon, color);
+        _markerIcons[category] = bitmapDescriptor;
+      }
+      setState(() {
+        _markersInitialized = true;
+      });
+    } catch (e) {
+      debugPrint('Error initializing marker icons: $e');
+      setState(() {
+        _markersInitialized = true;
+      });
+    }
+  }
+
+  /// Category-specific styled marker creation (no default marker)
+  Future<BitmapDescriptor> _createCategoryStyledMarker(String category, IconData iconData, Color color) async {
+    switch (category) {
+      case 'Natural Attraction':
+        return await _createNatureMarker(iconData, color);
+      case 'Cultural Site':
+        return await _createCultureMarker(iconData, color);
+      case 'Adventure Spot':
+        return await _createAdventureMarker(iconData, color);
+      case 'Restaurant':
+        return await _createFoodMarker(iconData, color);
+      case 'Shopping':
+        return await _createShoppingMarker(iconData, color);
+      case 'Entertainment':
+        return await _createEntertainmentMarker(iconData, color);
+      default:
+        throw Exception('Unknown category: $category');
+    }
+  }
+
+  // --- Marker style implementations ---
+  Future<BitmapDescriptor> _createNatureMarker(IconData iconData, Color color) async {
+    final pictureRecorder = ui.PictureRecorder();
+    final canvas = Canvas(pictureRecorder);
+    final size = 120.0;
+    final radius = size / 2;
+    // Leaf pattern background
+    final leafPaint = Paint()
+      ..color = color.withOpacity(0.2)
+      ..style = PaintingStyle.fill;
+    for (int i = 0; i < 8; i++) {
+      final angle = (i * 45) * (3.14159 / 180);
+      final leafPath = Path();
+      final startX = radius + (radius * 0.85) * math.cos(angle);
+      final startY = radius + (radius * 0.85) * math.sin(angle);
+      leafPath.moveTo(startX, startY);
+      leafPath.quadraticBezierTo(
+        startX + 12 * math.cos(angle + 0.3),
+        startY + 12 * math.sin(angle + 0.3),
+        startX + 8 * math.cos(angle),
+        startY + 8 * math.sin(angle),
+      );
+      leafPath.quadraticBezierTo(
+        startX + 12 * math.cos(angle - 0.3),
+        startY + 12 * math.sin(angle - 0.3),
+        startX,
+        startY,
+      );
+      canvas.drawPath(leafPath, leafPaint);
+    }
+    // Main circle
+    final paint = Paint()..color = color;
+    canvas.drawCircle(Offset(radius, radius), radius - 6, paint);
+    // Icon
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+    textPainter.text = TextSpan(
+      text: String.fromCharCode(iconData.codePoint),
+      style: TextStyle(
+        fontSize: size * 0.5,
+        fontFamily: iconData.fontFamily,
+        package: iconData.fontPackage,
+        color: Colors.white,
+      ),
+    );
+    textPainter.layout();
+    final iconOffset = Offset(radius - textPainter.width / 2, radius - textPainter.height / 2);
+    textPainter.paint(canvas, iconOffset);
+    final picture = pictureRecorder.endRecording();
+    final image = await picture.toImage(size.toInt(), size.toInt());
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    final uint8List = byteData!.buffer.asUint8List();
+    return BitmapDescriptor.fromBytes(uint8List);
+  }
+
+  Future<BitmapDescriptor> _createCultureMarker(IconData iconData, Color color) async {
+    final pictureRecorder = ui.PictureRecorder();
+    final canvas = Canvas(pictureRecorder);
+    final size = 120.0;
+    final radius = size / 2;
+    // Architectural columns
+    final columnPaint = Paint()
+      ..color = color.withOpacity(0.25)
+      ..style = PaintingStyle.fill;
+    for (int i = 0; i < 4; i++) {
+      final angle = (i * 90) * (3.14159 / 180);
+      final columnX = radius + (radius * 0.9) * math.cos(angle);
+      final columnY = radius + (radius * 0.9) * math.sin(angle);
+      final baseRect = Rect.fromCenter(center: Offset(columnX, columnY + 8), width: 12, height: 4);
+      canvas.drawRect(baseRect, columnPaint);
+      final shaftRect = Rect.fromCenter(center: Offset(columnX, columnY), width: 8, height: 20);
+      canvas.drawRect(shaftRect, columnPaint);
+      final capitalRect = Rect.fromCenter(center: Offset(columnX, columnY - 8), width: 14, height: 5);
+      canvas.drawRect(capitalRect, columnPaint);
+    }
+    // Main circle
+    final paint = Paint()..color = color;
+    canvas.drawCircle(Offset(radius, radius), radius - 6, paint);
+    // Icon
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+    textPainter.text = TextSpan(
+      text: String.fromCharCode(iconData.codePoint),
+      style: TextStyle(
+        fontSize: size * 0.5,
+        fontFamily: iconData.fontFamily,
+        package: iconData.fontPackage,
+        color: Colors.white,
+      ),
+    );
+    textPainter.layout();
+    final iconOffset = Offset(radius - textPainter.width / 2, radius - textPainter.height / 2);
+    textPainter.paint(canvas, iconOffset);
+    final picture = pictureRecorder.endRecording();
+    final image = await picture.toImage(size.toInt(), size.toInt());
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    final uint8List = byteData!.buffer.asUint8List();
+    return BitmapDescriptor.fromBytes(uint8List);
+  }
+
+  Future<BitmapDescriptor> _createAdventureMarker(IconData iconData, Color color) async {
+    final pictureRecorder = ui.PictureRecorder();
+    final canvas = Canvas(pictureRecorder);
+    final size = 120.0;
+    final radius = size / 2;
+    // Mountain silhouette
+    final mountainPaint = Paint()
+      ..color = color.withOpacity(0.2)
+      ..style = PaintingStyle.fill;
+    final mountainPath = Path();
+    mountainPath.moveTo(20, radius + 30);
+    mountainPath.lineTo(40, radius - 10);
+    mountainPath.lineTo(60, radius + 10);
+    mountainPath.lineTo(80, radius - 20);
+    mountainPath.lineTo(100, radius + 20);
+    mountainPath.lineTo(120, radius + 30);
+    mountainPath.close();
+    canvas.drawPath(mountainPath, mountainPaint);
+    // Main circle
+    final paint = Paint()..color = color;
+    canvas.drawCircle(Offset(radius, radius), radius - 6, paint);
+    // Icon
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+    textPainter.text = TextSpan(
+      text: String.fromCharCode(iconData.codePoint),
+      style: TextStyle(
+        fontSize: size * 0.5,
+        fontFamily: iconData.fontFamily,
+        package: iconData.fontPackage,
+        color: Colors.white,
+      ),
+    );
+    textPainter.layout();
+    final iconOffset = Offset(radius - textPainter.width / 2, radius - textPainter.height / 2);
+    textPainter.paint(canvas, iconOffset);
+    final picture = pictureRecorder.endRecording();
+    final image = await picture.toImage(size.toInt(), size.toInt());
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    final uint8List = byteData!.buffer.asUint8List();
+    return BitmapDescriptor.fromBytes(uint8List);
+  }
+
+  Future<BitmapDescriptor> _createFoodMarker(IconData iconData, Color color) async {
+    final pictureRecorder = ui.PictureRecorder();
+    final canvas = Canvas(pictureRecorder);
+    final size = 120.0;
+    final radius = size / 2;
+    // Plate-like outer ring
+    final platePaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 8.0;
+    canvas.drawCircle(Offset(radius, radius), radius - 6, platePaint);
+    // Main circle
+    final paint = Paint()..color = color;
+    canvas.drawCircle(Offset(radius, radius), radius - 14, paint);
+    // Icon
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+    textPainter.text = TextSpan(
+      text: String.fromCharCode(iconData.codePoint),
+      style: TextStyle(
+        fontSize: size * 0.5,
+        fontFamily: iconData.fontFamily,
+        package: iconData.fontPackage,
+        color: Colors.white,
+      ),
+    );
+    textPainter.layout();
+    final iconOffset = Offset(radius - textPainter.width / 2, radius - textPainter.height / 2);
+    textPainter.paint(canvas, iconOffset);
+    final picture = pictureRecorder.endRecording();
+    final image = await picture.toImage(size.toInt(), size.toInt());
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    final uint8List = byteData!.buffer.asUint8List();
+    return BitmapDescriptor.fromBytes(uint8List);
+  }
+
+  Future<BitmapDescriptor> _createShoppingMarker(IconData iconData, Color color) async {
+    final pictureRecorder = ui.PictureRecorder();
+    final canvas = Canvas(pictureRecorder);
+    final size = 120.0;
+    final radius = size / 2;
+    // Shopping bag handles
+    final handlePaint = Paint()
+      ..color = color.withOpacity(0.4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 6.0;
+    // Left handle
+    canvas.drawArc(
+      Rect.fromCenter(center: Offset(radius - 15, radius - 10), width: 20, height: 20),
+      0,
+      3.14159,
+      false,
+      handlePaint,
+    );
+    // Right handle
+    canvas.drawArc(
+      Rect.fromCenter(center: Offset(radius + 15, radius - 10), width: 20, height: 20),
+      0,
+      3.14159,
+      false,
+      handlePaint,
+    );
+    // Main circle
+    final paint = Paint()..color = color;
+    canvas.drawCircle(Offset(radius, radius), radius - 6, paint);
+    // Icon
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+    textPainter.text = TextSpan(
+      text: String.fromCharCode(iconData.codePoint),
+      style: TextStyle(
+        fontSize: size * 0.5,
+        fontFamily: iconData.fontFamily,
+        package: iconData.fontPackage,
+        color: Colors.white,
+      ),
+    );
+    textPainter.layout();
+    final iconOffset = Offset(radius - textPainter.width / 2, radius - textPainter.height / 2);
+    textPainter.paint(canvas, iconOffset);
+    final picture = pictureRecorder.endRecording();
+    final image = await picture.toImage(size.toInt(), size.toInt());
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    final uint8List = byteData!.buffer.asUint8List();
+    return BitmapDescriptor.fromBytes(uint8List);
+  }
+
+  Future<BitmapDescriptor> _createEntertainmentMarker(IconData iconData, Color color) async {
+    final pictureRecorder = ui.PictureRecorder();
+    final canvas = Canvas(pictureRecorder);
+    final size = 120.0;
+    final radius = size / 2;
+    // Star sparkles
+    final sparkPaint = Paint()
+      ..color = color.withOpacity(0.3)
+      ..style = PaintingStyle.fill;
+    for (int i = 0; i < 6; i++) {
+      final angle = (i * 60) * (3.14159 / 180);
+      final sparkPath = Path();
+      final centerX = radius + (radius * 0.8) * math.cos(angle);
+      final centerY = radius + (radius * 0.8) * math.sin(angle);
+      sparkPath.moveTo(centerX, centerY - 6);
+      sparkPath.lineTo(centerX + 2, centerY - 2);
+      sparkPath.lineTo(centerX + 6, centerY);
+      sparkPath.lineTo(centerX + 2, centerY + 2);
+      sparkPath.lineTo(centerX, centerY + 6);
+      sparkPath.lineTo(centerX - 2, centerY + 2);
+      sparkPath.lineTo(centerX - 6, centerY);
+      sparkPath.lineTo(centerX - 2, centerY - 2);
+      sparkPath.close();
+      canvas.drawPath(sparkPath, sparkPaint);
+    }
+    // Main circle
+    final paint = Paint()..color = color;
+    canvas.drawCircle(Offset(radius, radius), radius - 6, paint);
+    // Icon
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+    textPainter.text = TextSpan(
+      text: String.fromCharCode(iconData.codePoint),
+      style: TextStyle(
+        fontSize: size * 0.5,
+        fontFamily: iconData.fontFamily,
+        package: iconData.fontPackage,
+        color: Colors.white,
+      ),
+    );
+    textPainter.layout();
+    final iconOffset = Offset(radius - textPainter.width / 2, radius - textPainter.height / 2);
+    textPainter.paint(canvas, iconOffset);
+    final picture = pictureRecorder.endRecording();
+    final image = await picture.toImage(size.toInt(), size.toInt());
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    final uint8List = byteData!.buffer.asUint8List();
+    return BitmapDescriptor.fromBytes(uint8List);
+  }
+
+  // _createDefaultMarker is now unused and has been removed.
+
+  /// Create custom marker icon from IconData
+
+
+  /// Get marker icon based on hotspot category (no default fallback)
+  BitmapDescriptor? _getMarkerIcon(String category) {
+    // Normalize category for robust lookup
+    String normalized = category.trim();
+    if (_markerIcons.containsKey(normalized)) {
+      return _markerIcons[normalized];
+    }
+    // Try fallback: case-insensitive match
+    for (final key in _markerIcons.keys) {
+      if (key.toLowerCase() == normalized.toLowerCase()) {
+        return _markerIcons[key];
+      }
+    }
+    return null;
   }
 
   void _initializeHotspotStream() {
     _hotspotSubscription = HotspotService.getHotspotsStream().listen(
       (hotspots) {
-        if (mounted) {
+        if (mounted && _markersInitialized) {
           setState(() {
             _allHotspots = hotspots;
-            _hotspotMarkers = hotspots
-                .map((hotspot) => Marker(
-                      markerId: MarkerId(hotspot.hotspotId),
-                      position: LatLng(hotspot.latitude ?? 0.0, hotspot.longitude ?? 0.0),
-                      onTap: () => _showHotspotDetailsSheet(hotspot),
-                    ))
-                .toSet();
+            _updateHotspotMarkers(hotspots);
           });
         }
       },
@@ -62,6 +429,23 @@ class _MapScreenState extends State<MapScreen> {
         debugPrint('Error listening to hotspots stream: $error');
       },
     );
+  }
+
+  /// Update hotspot markers with custom icons (skip if no icon available)
+  void _updateHotspotMarkers(List<Hotspot> hotspots) {
+    _hotspotMarkers = hotspots
+        .where((hotspot) => _getMarkerIcon(hotspot.category) != null)
+        .map((hotspot) => Marker(
+              markerId: MarkerId(hotspot.hotspotId),
+              position: LatLng(hotspot.latitude ?? 0.0, hotspot.longitude ?? 0.0),
+              icon: _getMarkerIcon(hotspot.category)!,
+              onTap: () => _showHotspotDetailsSheet(hotspot),
+              infoWindow: InfoWindow(
+                title: hotspot.name,
+                snippet: hotspot.category,
+              ),
+            ))
+        .toSet();
   }
 
   void _onSearch() {
@@ -76,15 +460,10 @@ class _MapScreenState extends State<MapScreen> {
       final matchesCategory = showAll || _selectedCategories.contains(hotspot.category);
       return matchesQuery && matchesCategory;
     }).toList();
+    
     if (mounted) {
       setState(() {
-        _hotspotMarkers = filteredHotspots
-            .map((hotspot) => Marker(
-                  markerId: MarkerId(hotspot.hotspotId),
-                  position: LatLng(hotspot.latitude ?? 0.0, hotspot.longitude ?? 0.0),
-                  onTap: () => _showHotspotDetailsSheet(hotspot),
-                ))
-            .toSet();
+        _updateHotspotMarkers(filteredHotspots);
         _isSearching = false;
       });
     }
@@ -749,7 +1128,7 @@ class _MapScreenState extends State<MapScreen> {
             ),
           ),
           // Loading overlay
-          if (_isMapLoading)
+          if (_isMapLoading || !_markersInitialized)
             Container(
               color: Colors.white,
               child: const Center(
