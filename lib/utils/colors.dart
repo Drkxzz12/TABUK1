@@ -39,4 +39,6 @@ class AppColors {
     colors: [gradientStart, gradientEnd],
     stops: [0.0, 1.0],
   );
+
+ 
 }

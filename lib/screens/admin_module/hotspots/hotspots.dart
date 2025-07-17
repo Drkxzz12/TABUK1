@@ -19,17 +19,83 @@ class HotspotsManagementScreen extends StatefulWidget {
 
 class _HotspotsManagementScreenState extends State<HotspotsManagementScreen> {
   final Stream<List<Hotspot>> _hotspotsStream = HotspotService.getHotspotsStream();
+  bool _showArchivedOnly = false;
 
   Future<void> _addHotspot(Hotspot hotspot) => HotspotService.addHotspot(hotspot);
   Future<void> _editHotspot(Hotspot hotspot) => HotspotService.updateHotspot(hotspot);
-  Future<void> _deleteHotspot(String id) => HotspotService.deleteHotspot(id);
+  Future<void> _archiveHotspot(String id) => HotspotService.archiveHotspot(id);
+  Future<void> _restoreHotspot(String id) => HotspotService.restoreHotspot(id);
 
   void _showHotspotDialog([Hotspot? hotspot]) {
     showDialog(
       context: context,
-      builder: (context) => _HotspotDialog(
+      builder: (dialogContext) => _HotspotDialog(
         hotspot: hotspot,
         onSave: hotspot == null ? _addHotspot : _editHotspot,
+      ),
+    );
+  }
+
+  void _showArchiveConfirmDialog(Hotspot hotspot) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Archive Hotspot'),
+        content: Text('Are you sure you want to archive "${hotspot.name}"? This will hide it from users but you can restore it later.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await _archiveHotspot(hotspot.hotspotId);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${hotspot.name} has been archived'),
+                    backgroundColor: AppColors.primaryTeal,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: Text('Archive'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRestoreConfirmDialog(Hotspot hotspot) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Restore Hotspot'),
+        content: Text('Are you sure you want to restore "${hotspot.name}"? This will make it visible to users again.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await _restoreHotspot(hotspot.hotspotId);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${hotspot.name} has been restored'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            child: Text('Restore'),
+          ),
+        ],
       ),
     );
   }
@@ -43,6 +109,16 @@ class _HotspotsManagementScreenState extends State<HotspotsManagementScreen> {
         iconTheme: IconThemeData(color: AppColors.textDark),
         elevation: 0,
         actions: [
+          // Toggle button for showing archived hotspots
+          IconButton(
+            icon: Icon(_showArchivedOnly ? Icons.visibility : Icons.archive),
+            onPressed: () {
+              setState(() {
+                _showArchivedOnly = !_showArchivedOnly;
+              });
+            },
+            tooltip: _showArchivedOnly ? 'Show Active Hotspots' : 'Show Archived Hotspots',
+          ),
           IconButton(
             icon: Icon(Icons.add),
             onPressed: () => _showHotspotDialog(),
@@ -51,65 +127,214 @@ class _HotspotsManagementScreenState extends State<HotspotsManagementScreen> {
       ),
       body: Container(
         decoration: BoxDecoration(gradient: AppColors.backgroundGradient),
-        child: StreamBuilder<List<Hotspot>>(
-          stream: _hotspotsStream,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return Center(child: Text('Error loading hotspots'));
-            }
-            
-            final hotspots = snapshot.data ?? [];
-            return ListView.builder(
+        child: Column(
+          children: [
+            // Status indicator
+            Container(
               padding: EdgeInsets.all(16),
-              itemCount: hotspots.length,
-              itemBuilder: (context, index) {
-                final hotspot = hotspots[index];
-                return Card(
-                  margin: EdgeInsets.only(bottom: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  child: ListTile(
-                    onTap: () => _showHotspotDialog(hotspot),
-                    leading: _buildHotspotImage(hotspot),
-                    title: Text(hotspot.name, style: TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(hotspot.category, style: TextStyle(color: AppColors.primaryTeal)),
-                        Text(hotspot.formattedEntranceFee),
-                        Text('${hotspot.latitude?.toStringAsFixed(5) ?? 'N/A'}, ${hotspot.longitude?.toStringAsFixed(5) ?? 'N/A'}'),
-                      ],
-                    ),
-                    trailing: IconButton(
-                      icon: Icon(Icons.delete, color: Colors.red),
-                      onPressed: () => _deleteHotspot(hotspot.hotspotId),
+              child: Row(
+                children: [
+                  Icon(
+                    _showArchivedOnly ? Icons.archive : Icons.visibility,
+                    color: _showArchivedOnly ? Colors.orange : Colors.green,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    _showArchivedOnly ? 'Showing Archived Hotspots' : 'Showing Active Hotspots',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: _showArchivedOnly ? Colors.orange : Colors.green,
                     ),
                   ),
-                );
-              },
-            );
-          },
+                ],
+              ),
+            ),
+            Expanded(
+              child: StreamBuilder<List<Hotspot>>(
+                stream: _hotspotsStream,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return Center(child: Text('Error loading hotspots'));
+                  }
+                  
+                  final allHotspots = snapshot.data ?? [];
+                  
+                  // Filter hotspots based on archive status
+                  final filteredHotspots = allHotspots.where((hotspot) {
+                    final isArchived = hotspot.isArchived ?? false;
+                    return _showArchivedOnly ? isArchived : !isArchived;
+                  }).toList();
+
+                  if (filteredHotspots.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _showArchivedOnly ? Icons.archive : Icons.location_on,
+                            size: 64,
+                            color: Colors.grey,
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            _showArchivedOnly 
+                              ? 'No archived hotspots found' 
+                              : 'No active hotspots found',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    padding: EdgeInsets.all(16),
+                    itemCount: filteredHotspots.length,
+                    itemBuilder: (context, index) {
+                      final hotspot = filteredHotspots[index];
+                      final isArchived = hotspot.isArchived ?? false;
+                      
+                      return Card(
+                        margin: EdgeInsets.only(bottom: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            // Add subtle overlay for archived items
+                            color: isArchived ? Colors.grey.withOpacity(0.1) : null,
+                          ),
+                          child: ListTile(
+                            onTap: () => _showHotspotDialog(hotspot),
+                            leading: Stack(
+                              children: [
+                                _buildHotspotImage(hotspot),
+                                if (isArchived)
+                                  Positioned(
+                                    right: 0,
+                                    top: 0,
+                                    child: Container(
+                                      padding: EdgeInsets.all(2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Icons.archive,
+                                        size: 12,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            title: Text(
+                              hotspot.name,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isArchived ? Colors.grey : null,
+                              ),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  hotspot.category,
+                                  style: TextStyle(
+                                    color: isArchived ? Colors.grey : AppColors.primaryTeal,
+                                  ),
+                                ),
+                                Text(
+                                  hotspot.formattedEntranceFee,
+                                  style: TextStyle(
+                                    color: isArchived ? Colors.grey : null,
+                                  ),
+                                ),
+                                Text(
+                                  '${hotspot.latitude?.toStringAsFixed(5) ?? 'N/A'}, ${hotspot.longitude?.toStringAsFixed(5) ?? 'N/A'}',
+                                  style: TextStyle(
+                                    color: isArchived ? Colors.grey : null,
+                                  ),
+                                ),
+                                if (isArchived)
+                                  Container(
+                                    margin: EdgeInsets.only(top: 4),
+                                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      'ARCHIVED',
+                                      style: TextStyle(
+                                        color: Colors.orange,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            trailing: isArchived
+                                ? IconButton(
+                                    icon: Icon(Icons.restore, color: Colors.green),
+                                    onPressed: () => _showRestoreConfirmDialog(hotspot),
+                                    tooltip: 'Restore hotspot',
+                                  )
+                                : IconButton(
+                                    icon: Icon(Icons.archive, color: Colors.orange),
+                                    onPressed: () => _showArchiveConfirmDialog(hotspot),
+                                    tooltip: 'Archive hotspot',
+                                  ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildHotspotImage(Hotspot hotspot) {
+    final isArchived = hotspot.isArchived ?? false;
+    
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
-      child: hotspot.images.isNotEmpty
-          ? Image.network(hotspot.images.first, width: 56, height: 56, fit: BoxFit.cover)
-          : Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(8),
+      child: ColorFiltered(
+        colorFilter: isArchived 
+          ? ColorFilter.mode(Colors.grey, BlendMode.saturation)
+          : ColorFilter.mode(Colors.transparent, BlendMode.multiply),
+        child: hotspot.images.isNotEmpty
+            ? Image.network(
+                hotspot.images.first,
+                width: 56,
+                height: 56,
+                fit: BoxFit.cover,
+              )
+            : Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.image,
+                  color: Colors.black26,
+                  size: 28,
+                ),
               ),
-              child: Icon(Icons.image, color: Colors.black26, size: 28),
-            ),
+      ),
     );
   }
 }
@@ -200,9 +425,11 @@ class _HotspotDialogState extends State<_HotspotDialog> {
 
   Future<void> _saveHotspot() async {
     if (!_formKey.currentState!.validate() || _location == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please fill all fields and pick a location'), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Please fill all fields and pick a location'), backgroundColor: Colors.red),
+        );
+      }
       return;
     }
 
@@ -239,14 +466,18 @@ class _HotspotDialogState extends State<_HotspotDialog> {
       createdAt: widget.hotspot?.createdAt ?? DateTime.now(),
       latitude: _location!.latitude,
       longitude: _location!.longitude,
+      // Preserve the archive status when editing
+      isArchived: widget.hotspot?.isArchived ?? false,
     );
 
     widget.onSave(hotspot);
-    Navigator.pop(context);
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Hotspot saved successfully'), backgroundColor: AppColors.primaryTeal),
-    );
+    if (mounted) {
+      Navigator.pop(context);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Hotspot saved successfully'), backgroundColor: AppColors.primaryTeal),
+      );
+    }
   }
 
   List<String> _splitText(String text) {
@@ -432,9 +663,11 @@ class _LocationPickerState extends State<_LocationPicker> {
             if (_isInBounds(latLng)) {
               setState(() => _selectedLocation = latLng);
             } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Select location within Bukidnon'), backgroundColor: Colors.red),
-              );
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Select location within Bukidnon'), backgroundColor: Colors.red),
+                );
+              }
             }
           },
           cameraTargetBounds: CameraTargetBounds(_bukidnonBounds),

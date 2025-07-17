@@ -56,6 +56,7 @@ class _MainTouristScreenState extends State<MainTouristScreen> {
     if (user == null) return;
     final doc = await FirebaseFirestore.instance.collection('Users').doc(user.uid).get();
     final role = doc.data()?['role'];
+    if (!mounted) return;
     setState(() {
       _userRole = role;
     });
@@ -85,6 +86,7 @@ void _showRoleSelectionDialog(String uid) {
 
   if (!mounted) return;
 
+  if (!mounted) return;
   setState(() {
     _userRole = role;
   });
@@ -126,6 +128,7 @@ void _showRoleSelectionDialog(String uid) {
         return;
       }
     }
+    if (!mounted) return;
     setState(() {
       _selectedIndex = index;
     });
@@ -220,7 +223,10 @@ class _RoleSelectionDialogState extends State<_RoleSelectionDialog> {
           child: Text(role, style: const TextStyle(color: AppColors.textDark, fontSize: 14)),
         )).toList(),
         onChanged: (value) {
-          if (value != null) setState(() => _selectedRole = value);
+          if (value != null) {
+            if (!mounted) return;
+            setState(() => _selectedRole = value);
+          }
         },
       ),
       actions: [

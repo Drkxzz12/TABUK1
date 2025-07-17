@@ -551,16 +551,28 @@ import 'package:capstone_app/services/connectivity_service.dart';
             ),
             error: _passwordError,
           ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: _showForgotPasswordDialog,
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.primaryTeal,
-                textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          _buildForgotPasswordHelper(), // User-friendly helper at the end
+        ],
+      );
+    }
+
+    // Simplified forgot password helper: just the button
+    Widget _buildForgotPasswordHelper() {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: _showForgotPasswordDialog,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primaryTeal,
+              textStyle: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
               ),
-              child: Text(AppConstants.forgotPassword),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             ),
+            child: Text(AppConstants.forgotPassword),
           ),
         ],
       );
@@ -844,11 +856,19 @@ import 'package:capstone_app/services/connectivity_service.dart';
       }
 
       try {
-        await AuthService.sendPasswordResetEmail(email);
+        final result = await AuthService.sendPasswordResetEmail(email);
         if (mounted) {
-        Navigator.of(context).pop(); // ✅ Protected with mounted check
+          Navigator.of(context).pop();
         }
-        widget.onPasswordResetSent('Password reset email sent. Please check your inbox.');
+        // Show a Google-specific message if needed
+        if (result['type'] == 'google_only') {
+          widget.onPasswordResetSent(result['message'] ?? 'Instructions sent! Check your email for steps to reset your Google password.');
+        } else {
+          widget.onPasswordResetSent(
+            result['message'] ??
+            'A password reset email has been sent to your address. Please check your inbox and spam/junk folder. Follow the instructions to reset your password.'
+          );
+        }
       } catch (e) {
         widget.onError(e.toString());
       }

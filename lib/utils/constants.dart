@@ -125,7 +125,7 @@ class AppConstants {
   static const String loadingHotspots = 'Loading hotspots...';
   static const String noHotspotsFound = 'No hotspots found';
   static const String errorLoadingHotspots = 'Error loading hotspots';
-  static const String searchHotspots = 'Search hotspots...';
+  static const String searchHotspots = 'Search Destinations...';
   static const String filterBy = 'Filter by';
   static const String sortBy = 'Sort by';
   static const String allCategories = 'All Categories';
@@ -414,6 +414,4 @@ class AppConstants {
   static const double searchSectionSpacing = 12.0;
   static const double searchResultsSpacing = 16.0;
 
-  // // ignore: prefer_typing_uninitialized_variables
-  // static var errorLoadingTouristPreferences;
 }

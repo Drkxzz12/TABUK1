@@ -35,6 +35,8 @@ class Hotspot {
   final bool foodAccess;
   /// Date and time when the hotspot was created.
   final DateTime createdAt;
+  /// Whether the hotspot is archived (hidden from users).
+  final bool? isArchived;
   // Optional fields for extended features
   /// List of safety tips for the hotspot.
   final List<String>? safetyTips;
@@ -69,6 +71,7 @@ class Hotspot {
     this.suggestions,
     this.latitude,
     this.longitude,
+    this.isArchived,
   });
 
   /// Factory constructor for creating [Hotspot] from JSON.
@@ -94,6 +97,7 @@ class Hotspot {
       suggestions: json['suggestions'] != null ? List<String>.from(json['suggestions']) : null,
       latitude: json['latitude'] != null ? (json['latitude'] as num).toDouble() : null,
       longitude: json['longitude'] != null ? (json['longitude'] as num).toDouble() : null,
+      isArchived: json['isArchived'],
     );
   }
 
@@ -120,6 +124,7 @@ class Hotspot {
       suggestions: map['suggestions'] != null ? List<String>.from(map['suggestions']) : null,
       latitude: map['latitude'] != null ? (map['latitude'] as num).toDouble() : null,
       longitude: map['longitude'] != null ? (map['longitude'] as num).toDouble() : null,
+      isArchived: map['isArchived'],
     );
   }
 
@@ -147,6 +152,7 @@ class Hotspot {
     if (suggestions != null) data['suggestions'] = suggestions;
     if (latitude != null) data['latitude'] = latitude;
     if (longitude != null) data['longitude'] = longitude;
+    if (isArchived != null) data['isArchived'] = isArchived;
     return data;
   }
 
@@ -172,6 +178,7 @@ class Hotspot {
     DateTime? createdAt,
     double? latitude,
     double? longitude,
+    bool? isArchived,
   }) {
     return Hotspot(
       hotspotId: hotspotId ?? this.hotspotId,
@@ -194,6 +201,7 @@ class Hotspot {
       createdAt: createdAt ?? this.createdAt,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
+      isArchived: isArchived ?? this.isArchived,
     );
   }
 

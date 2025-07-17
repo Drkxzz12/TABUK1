@@ -8,9 +8,105 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:capstone_app/utils/constants.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 /// Service for authentication and user management.
 class AuthService {
+  /// Helper to check user provider info for password reset logic
+  static Future<Map<String, dynamic>> checkUserProviderInfo(String email) async {
+    final result = {
+      'exists': false,
+      'hasEmailProvider': false,
+      'hasGoogleProvider': false,
+      'providers': <String>[],
+    };
+    
+    try {
+      // First check Firebase Auth for sign-in methods
+      final methods = await FirebaseAuth.instance.fetchSignInMethodsForEmail(email.trim());
+      if (methods.isNotEmpty) {
+        result['exists'] = true;
+        result['providers'] = methods;
+        if (methods.contains('password')) result['hasEmailProvider'] = true;
+        if (methods.contains('google.com')) result['hasGoogleProvider'] = true;
+      }
+      
+      // If no methods found in Firebase Auth, check Firestore
+      if (methods.isEmpty) {
+        final querySnapshot = await FirebaseFirestore.instance
+            .collection('Users')
+            .where('email', isEqualTo: email.toLowerCase().trim())
+            .get();
+        
+        if (querySnapshot.docs.isNotEmpty) {
+          result['exists'] = true;
+          // Since it's in Firestore but not in Firebase Auth methods,
+          // it's likely a Google account
+          result['hasGoogleProvider'] = true;
+          result['providers'] = ['google.com'];
+        }
+      }
+      
+    } catch (e) {
+      debugPrint('Error checking user provider info: $e');
+      // If Firebase Auth throws an error, still check Firestore
+      try {
+        final querySnapshot = await FirebaseFirestore.instance
+            .collection('Users')
+            .where('email', isEqualTo: email.toLowerCase().trim())
+            .get();
+        
+        if (querySnapshot.docs.isNotEmpty) {
+          result['exists'] = true;
+          result['hasGoogleProvider'] = true;
+          result['providers'] = ['google.com'];
+        }
+      } catch (firestoreError) {
+        debugPrint('Error checking Firestore for user: $firestoreError');
+        result['exists'] = false;
+      }
+    }
+    
+    return result;
+  }
+
+  /// Method to call the backend function for sending Google account instructions
+  static Future<void> sendGooglePasswordResetInstructions(String email) async {
+    try {
+      final functions = FirebaseFunctions.instance;
+      // Configure for your region if needed
+      // final functions = FirebaseFunctions.instanceFor(region: 'us-central1');
+      final callable = functions.httpsCallable('sendGooglePasswordResetEmail');
+      final result = await callable.call(<String, dynamic>{
+        'email': email,
+      });
+      if (result.data['success'] == true) {
+        debugPrint('Google password reset instructions sent successfully');
+      } else {
+        throw 'Failed to send instructions: ${result.data['message'] ?? 'Unknown error'}';
+      }
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('Firebase Functions error: ${e.code} - ${e.message}');
+      switch (e.code) {
+        case 'not-found':
+          throw 'Account not found. Please check your email address.';
+        case 'invalid-argument':
+          throw 'Invalid email address provided.';
+        case 'unauthenticated':
+          throw 'Authentication error. Please try again.';
+        case 'permission-denied':
+          throw 'Permission denied. Please contact support.';
+        case 'unavailable':
+          throw 'Service temporarily unavailable. Please try again later.';
+        default:
+          throw 'Failed to send instructions. Please try again.';
+      }
+    } catch (e) {
+      debugPrint('Error sending Google password reset instructions: $e');
+      throw 'Failed to send instructions. Please try again.';
+    }
+  }
+
   /// Checks if an email already exists in the database
   static Future<bool> emailExists(String email) async {
     try {
@@ -394,14 +490,112 @@ class AuthService {
     }
   }
 
-  /// Send password reset email.
-  static Future<void> sendPasswordResetEmail(String email) async {
+  /// Send password reset email with provider check (no Cloud Functions needed)
+  static Future<Map<String, dynamic>> sendPasswordResetEmail(String email) async {
     try {
-      await _auth.sendPasswordResetEmail(email: email);
+      // Validate email format first
+      if (email.trim().isEmpty) {
+        throw 'Please enter your email address.';
+      }
+      
+      final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+      if (!emailRegex.hasMatch(email.trim())) {
+        throw 'Please enter a valid email address.';
+      }
+
+      debugPrint('Email validation passed for: ${email.trim()}');
+
+      // Check user provider information
+      final providerInfo = await checkUserProviderInfo(email);
+      debugPrint('Provider info: $providerInfo');
+      
+      if (!providerInfo['exists']) {
+        throw 'No account found with this email address.';
+      }
+
+      // Handle different provider scenarios
+      if (providerInfo['hasEmailProvider']) {
+        // User has email/password provider - send Firebase password reset
+        await FirebaseAuth.instance.sendPasswordResetEmail(email: email.trim());
+        debugPrint('Firebase password reset email sent to: ${email.trim()}');
+        return {
+          'success': true,
+          'message': 'Password reset email sent successfully.',
+          'type': 'email_provider'
+        };
+      } else if (providerInfo['hasGoogleProvider']) {
+        // User has Google provider - log request and return instructions
+        await FirebaseFirestore.instance
+            .collection('password_reset_requests')
+            .add({
+          'email': email.trim(),
+          'type': 'google_instructions',
+          'timestamp': FieldValue.serverTimestamp(),
+          'status': 'instructions_provided'
+        });
+        
+        debugPrint('Google password reset request logged for: ${email.trim()}');
+        return {
+          'success': true,
+          'message': 'This account uses Google Sign-In. To reset your password, go to Google Account settings and change your Google password.',
+          'type': 'google_provider',
+          'instructions': 'Visit https://myaccount.google.com/security to change your Google password.'
+        };
+      } else {
+        // Unknown provider
+        throw 'Unable to reset password for this account type.';
+      }
+      
     } on FirebaseAuthException catch (e) {
-      throw _handleAuthException(e);
+      debugPrint('FirebaseAuthException in sendPasswordResetEmail: ${e.code} - ${e.message}');
+      switch (e.code) {
+        case 'user-not-found':
+          throw 'No account found with this email address.';
+        case 'invalid-email':
+          throw 'Please enter a valid email address.';
+        case 'user-disabled':
+          throw 'This account has been disabled.';
+        case 'too-many-requests':
+          throw 'Too many requests. Please try again later.';
+        default:
+          throw 'Failed to send password reset email. Please try again.';
+      }
     } catch (e) {
-      throw AppConstants.authFailedToSendPasswordReset(e.toString());
+      debugPrint('Error in sendPasswordResetEmail: $e');
+      if (e is String) {
+        rethrow; // Re-throw our custom error messages
+      }
+      throw 'Failed to send password reset email. Please try again.';
+    }
+  }
+
+  /// Helper method to handle Firebase Auth exceptions
+  static String _handleAuthException(FirebaseAuthException e) {
+    debugPrint('FirebaseAuthException: ${e.code} - ${e.message}');
+    
+    switch (e.code) {
+      case 'user-not-found':
+        return 'No account found with this email address.';
+      case 'wrong-password':
+        return 'Incorrect password. Please try again.';
+      case 'invalid-email':
+        return 'Please enter a valid email address.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      case 'too-many-requests':
+        return 'Too many failed attempts. Please try again later.';
+      case 'network-request-failed':
+        return 'Network error. Please check your connection and try again.';
+      case 'weak-password':
+        return 'Password should be at least 6 characters long.';
+      case 'email-already-in-use':
+        return 'An account with this email already exists.';
+      case 'operation-not-allowed':
+        return 'This operation is not allowed. Please contact support.';
+      case 'invalid-credential':
+        return 'Invalid credentials. Please check your email and password.';
+      default:
+        return 'Authentication failed. Please try again.';
     }
   }
 
@@ -531,44 +725,6 @@ class AuthService {
       throw _handleAuthException(e);
     } catch (e) {
       throw AppConstants.authFailedToReauthenticateWithEmailLink(e.toString());
-    }
-  }
-
-  /// Handle Firebase Auth Exceptions and return user-friendly messages.
-  static String _handleAuthException(FirebaseAuthException e) {
-    switch (e.code) {
-      case 'weak-password':
-        return AppConstants.authWeakPassword;
-      case 'email-already-in-use':
-        return AppConstants.authEmailAlreadyInUse;
-      case 'invalid-email':
-        return AppConstants.authInvalidEmail;
-      case 'user-disabled':
-        return AppConstants.authUserDisabled;
-      case 'user-not-found':
-        return AppConstants.authUserNotFound;
-      case 'wrong-password':
-        return AppConstants.authWrongPassword;
-      case 'invalid-credential':
-        return AppConstants.authInvalidCredential;
-      case 'account-exists-with-different-credential':
-        return AppConstants.authAccountExistsWithDifferentCredential;
-      case 'credential-already-in-use':
-        return AppConstants.authCredentialAlreadyInUse;
-      case 'operation-not-allowed':
-        return AppConstants.authOperationNotAllowed;
-      case 'too-many-requests':
-        return AppConstants.authTooManyRequests;
-      case 'network-request-failed':
-        return AppConstants.authNetworkRequestFailed;
-      case 'requires-recent-login':
-        return AppConstants.authRequiresRecentLogin;
-      case 'popup-closed-by-user':
-        return AppConstants.authPopupClosedByUser;
-      case 'popup-blocked':
-        return AppConstants.authPopupBlocked;
-      default:
-        return e.message ?? AppConstants.authDefaultError;
     }
   }
 
