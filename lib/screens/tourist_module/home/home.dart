@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:capstone_app/models/hotspots_model.dart';
+import 'package:capstone_app/models/favorite_model.dart';
 import 'package:capstone_app/services/recommender_system.dart';
+import 'package:capstone_app/services/favorites_service.dart';
 import '../../../utils/constants.dart';
 import '../../../utils/colors.dart';
 import 'search_bar.dart';
@@ -20,10 +23,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
-  
+
   final _recommendations = <String, List<Hotspot>>{};
   String _greeting = '';
   IconData _greetingIcon = Icons.wb_sunny;
+
+  // Favorites functionality
+  List<Favorite> _favorites = [];
+  StreamSubscription<List<Favorite>>? _favoritesSubscription;
 
   @override
   void initState() {
@@ -31,6 +38,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _initializeAnimations();
     _setGreeting();
     _fetchLocationAndRecommendations();
+    _initializeFavoritesStream();
   }
 
   void _initializeAnimations() {
@@ -38,13 +46,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     );
-    
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0)
-        .animate(CurvedAnimation(parent: _animationController, curve: Curves.easeInOut));
-    
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, -0.5), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _animationController, curve: Curves.elasticOut));
-    
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, -0.5),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
+    );
+
     _animationController.forward();
   }
 
@@ -64,7 +77,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Future<void> _fetchLocationAndRecommendations() async {
     setState(() => _locationLoading = true);
-    
+
     try {
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
@@ -74,25 +87,50 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     } catch (e) {
       _userPosition = null;
     }
-    
+
     await _loadRecommendations();
     setState(() => _locationLoading = false);
   }
 
   Future<void> _loadRecommendations() async {
     final futures = await Future.wait([
-      TouristRecommendationService.getJustForYouRecommendations(limit: AppConstants.homeForYouLimit),
-      TouristRecommendationService.getTrendingHotspots(limit: AppConstants.homeTrendingLimit),
+      TouristRecommendationService.getJustForYouRecommendations(
+        limit: AppConstants.homeForYouLimit,
+      ),
+      TouristRecommendationService.getTrendingHotspots(
+        limit: AppConstants.homeTrendingLimit,
+      ),
       _getNearbyRecommendations(),
-      TouristRecommendationService.getHiddenGemsRecommendations(limit: 5),
     ]);
-    
+
+    // Fetch discover recommendations separately
+    final discover =
+        await TouristRecommendationService.getDiscoverRecommendations(limit: 5);
+
     _recommendations.addAll({
       'forYou': futures[0],
       'trending': futures[1],
       'nearby': futures[2],
-      'discover': futures[3],
+      'discover': discover,
     });
+  }
+
+  void _initializeFavoritesStream() {
+    _favoritesSubscription = FavoritesService.getUserFavorites().listen(
+      (favorites) {
+        if (mounted) {
+          setState(() {
+            _favorites = favorites;
+          });
+        }
+      },
+      onError: (error) => debugPrint('Error listening to favorites: $error'),
+    );
+  }
+
+  void _navigateToFavorites() {
+    // Navigate to profile screen and show favorites
+    Navigator.pushNamed(context, '/profile');
   }
 
   Future<List<Hotspot>> _getNearbyRecommendations() async {
@@ -100,7 +138,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       if (_userPosition != null) {
         final lat = _userPosition!.latitude;
         final lng = _userPosition!.longitude;
-        
+
         if (lat.isFinite && lng.isFinite) {
           return await TouristRecommendationService.getNearbyRecommendations(
             userLat: lat,
@@ -110,7 +148,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           );
         }
       }
-      
+
       return await TouristRecommendationService.getJustForYouRecommendations(
         limit: AppConstants.homeNearbyLimit,
       );
@@ -125,6 +163,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   void dispose() {
     _animationController.dispose();
+    _favoritesSubscription?.cancel();
     super.dispose();
   }
 
@@ -132,18 +171,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.backgroundColor,
-      body: _locationLoading 
-        ? const Center(child: CircularProgressIndicator())
-        : RefreshIndicator(
-            onRefresh: _fetchLocationAndRecommendations,
-            child: CustomScrollView(
-              slivers: [
-                _buildAppBar(),
-                _buildSearchBar(),
-                _buildRecommendations(),
-              ],
-            ),
-          ),
+      body:
+          _locationLoading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                onRefresh: _fetchLocationAndRecommendations,
+                child: CustomScrollView(
+                  slivers: [
+                    _buildAppBar(),
+                    _buildSearchBar(),
+                    _buildRecommendations(),
+                  ],
+                ),
+              ),
     );
   }
 
@@ -153,6 +193,42 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       floating: false,
       pinned: true,
       backgroundColor: Colors.transparent,
+      actions: [
+        if (_favorites.isNotEmpty)
+          IconButton(
+            onPressed: () => _navigateToFavorites(),
+            icon: Stack(
+              children: [
+                const Icon(Icons.favorite, color: Colors.white, size: 28),
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      '${_favorites.length}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            tooltip: 'My Favorites',
+          ),
+      ],
       flexibleSpace: FlexibleSpaceBar(
         background: Container(
           decoration: BoxDecoration(
@@ -168,42 +244,53 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           child: SafeArea(
             child: AnimatedBuilder(
               animation: _animationController,
-              builder: (context, child) => FadeTransition(
-                opacity: _fadeAnimation,
-                child: SlideTransition(
-                  position: _slideAnimation,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+              builder:
+                  (context, child) => FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: SlideTransition(
+                      position: _slideAnimation,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16.0,
+                          vertical: 8.0,
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(_greetingIcon, color: Colors.white, size: 28),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                _greeting,
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
+                            Row(
+                              children: [
+                                Icon(
+                                  _greetingIcon,
                                   color: Colors.white,
+                                  size: 28,
                                 ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _greeting,
+                                    style: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Discover amazing places around you',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.white70,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Discover amazing places around you',
-                          style: TextStyle(fontSize: 16, color: Colors.white70),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ),
             ),
           ),
         ),
@@ -226,29 +313,80 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
 
     final sections = [
-      _SectionConfig('Just For You', 'Personalized recommendations', 'forYou', 
-          AppColors.homeForYouColor, Icons.person_outline),
-      _SectionConfig('Trending Hotspots', 'What others are exploring', 'trending', 
-          AppColors.homeTrendingColor, Icons.trending_up),
-      _SectionConfig('Nearby Hotspots', 'Close to your location', 'nearby', 
-          AppColors.homeNearbyColor, Icons.location_on),
-      _SectionConfig('Discover Hidden Gems', 'Lesser-known spots', 'discover', 
-          AppColors.homeSeasonalColor, Icons.visibility_off),
+      _SectionConfig(
+        'Just For You',
+        'Personalized recommendations',
+        'forYou',
+        AppColors.homeForYouColor,
+        Icons.person_outline,
+      ),
+      _SectionConfig(
+        'Trending Hotspots',
+        'What others are exploring',
+        'trending',
+        AppColors.homeTrendingColor,
+        Icons.trending_up,
+      ),
+      _SectionConfig(
+        'Nearby Hotspots',
+        'Close to your location',
+        'nearby',
+        AppColors.homeNearbyColor,
+        Icons.location_on,
+      ),
+      _SectionConfig(
+        'Discover Hidden Gems',
+        'Lesser-known spots',
+        'discover',
+        AppColors.homeSeasonalColor,
+        Icons.visibility_off,
+      ),
     ];
+
+    // Add favorites section if user has favorites
+    if (_favorites.isNotEmpty) {
+      sections.insert(0, _SectionConfig(
+        'My Favorites',
+        'Your saved places',
+        'favorites',
+        Colors.red[400]!,
+        Icons.favorite,
+      ));
+    }
 
     return SliverToBoxAdapter(
       child: Column(
         children: [
           ...sections.asMap().entries.map((entry) {
             final config = entry.value;
-            final hotspots = _recommendations[config.key] ?? [];
-            return hotspots.isNotEmpty 
-              ? _RecommendationSection(
+            List<Hotspot> hotspots;
+            
+            if (config.key == 'favorites') {
+              // Use favorites data
+              hotspots = _favorites
+                  .where((favorite) => favorite.hotspot != null)
+                  .map((favorite) => favorite.hotspot!)
+                  .toList();
+            } else {
+              // Use recommendations data
+              hotspots = _recommendations[config.key] ?? [];
+            }
+            
+            // Always render the Discover section header, even if empty
+            if (config.key == 'discover') {
+              return _RecommendationSection(
+                config: config,
+                hotspots: hotspots,
+                delay: entry.key * 200,
+              );
+            }
+            return hotspots.isNotEmpty
+                ? _RecommendationSection(
                   config: config,
                   hotspots: hotspots,
                   delay: entry.key * 200,
                 )
-              : const SizedBox.shrink();
+                : const SizedBox.shrink();
           }),
           const SizedBox(height: 40),
         ],
@@ -264,7 +402,13 @@ class _SectionConfig {
   final Color color;
   final IconData icon;
 
-  const _SectionConfig(this.title, this.subtitle, this.key, this.color, this.icon);
+  const _SectionConfig(
+    this.title,
+    this.subtitle,
+    this.key,
+    this.color,
+    this.icon,
+  );
 }
 
 class _RecommendationSection extends StatefulWidget {
@@ -296,11 +440,15 @@ class _RecommendationSectionState extends State<_RecommendationSection>
       vsync: this,
     );
 
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0)
-        .animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-    
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
 
     Future.delayed(Duration(milliseconds: widget.delay), () {
       if (mounted) _controller.forward();
@@ -317,23 +465,24 @@ class _RecommendationSectionState extends State<_RecommendationSection>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _controller,
-      builder: (context, child) => FadeTransition(
-        opacity: _fadeAnimation,
-        child: SlideTransition(
-          position: _slideAnimation,
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(),
-                const SizedBox(height: 16),
-                _buildHotspotsList(),
-              ],
+      builder:
+          (context, child) => FadeTransition(
+            opacity: _fadeAnimation,
+            child: SlideTransition(
+              position: _slideAnimation,
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: 16),
+                    _buildHotspotsList(),
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
-      ),
     );
   }
 
@@ -348,7 +497,11 @@ class _RecommendationSectionState extends State<_RecommendationSection>
               color: widget.config.color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(widget.config.icon, color: widget.config.color, size: 24),
+            child: Icon(
+              widget.config.icon,
+              color: widget.config.color,
+              size: 24,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -357,7 +510,10 @@ class _RecommendationSectionState extends State<_RecommendationSection>
               children: [
                 Text(
                   widget.config.title,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 Text(
                   widget.config.subtitle,
@@ -383,10 +539,11 @@ class _RecommendationSectionState extends State<_RecommendationSection>
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: widget.hotspots.length,
         separatorBuilder: (_, __) => const SizedBox(width: 16),
-        itemBuilder: (context, index) => _HotspotCard(
-          hotspot: widget.hotspots[index],
-          color: widget.config.color,
-        ),
+        itemBuilder:
+            (context, index) => _HotspotCard(
+              hotspot: widget.hotspots[index],
+              color: widget.config.color,
+            ),
       ),
     );
   }
@@ -395,11 +552,12 @@ class _RecommendationSectionState extends State<_RecommendationSection>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => _ViewAllScreen(
-          title: widget.config.title,
-          hotspots: widget.hotspots,
-          color: widget.config.color,
-        ),
+        builder:
+            (_) => _ViewAllScreen(
+              title: widget.config.title,
+              hotspots: widget.hotspots,
+              color: widget.config.color,
+            ),
       ),
     );
   }
@@ -417,6 +575,22 @@ class _HotspotCard extends StatefulWidget {
 
 class _HotspotCardState extends State<_HotspotCard> {
   bool _isPressed = false;
+  bool _isFavorite = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkFavoriteStatus();
+  }
+
+  Future<void> _checkFavoriteStatus() async {
+    final isFavorite = await FavoritesService.isFavorite(widget.hotspot.hotspotId);
+    if (mounted) {
+      setState(() {
+        _isFavorite = isFavorite;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -443,9 +617,10 @@ class _HotspotCardState extends State<_HotspotCard> {
           borderRadius: BorderRadius.circular(20),
           child: Stack(
             children: [
-              _buildImage(),
-              _buildGradientOverlay(),
+              _buildImage(), 
+              _buildGradientOverlay(), 
               _buildContent(),
+              _buildFavoriteButton(),
             ],
           ),
         ),
@@ -455,13 +630,14 @@ class _HotspotCardState extends State<_HotspotCard> {
 
   Widget _buildImage() {
     return Positioned.fill(
-      child: widget.hotspot.images.isNotEmpty
-          ? Image.network(
-              widget.hotspot.images.first,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _buildPlaceholder(),
-            )
-          : _buildPlaceholder(),
+      child:
+          widget.hotspot.images.isNotEmpty
+              ? Image.network(
+                widget.hotspot.images.first,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _buildPlaceholder(),
+              )
+              : _buildPlaceholder(),
     );
   }
 
@@ -527,6 +703,88 @@ class _HotspotCardState extends State<_HotspotCard> {
       ),
     );
   }
+
+  Widget _buildFavoriteButton() {
+    return Positioned(
+      top: 8,
+      right: 8,
+      child: GestureDetector(
+        onTap: () => _toggleFavorite(),
+        child: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.6),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            _isFavorite ? Icons.favorite : Icons.favorite_border,
+            color: _isFavorite ? Colors.red : Colors.white,
+            size: 20,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleFavorite() async {
+    try {
+      if (_isFavorite) {
+        final success = await FavoritesService.removeFromFavorites(widget.hotspot.hotspotId);
+        if (success && mounted) {
+          setState(() {
+            _isFavorite = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.favorite_border, color: Colors.white, size: 16),
+                  const SizedBox(width: 8),
+                  Text('${widget.hotspot.name} removed from favorites'),
+                ],
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          );
+        }
+      } else {
+        final success = await FavoritesService.addToFavorites(widget.hotspot);
+        if (success && mounted) {
+          setState(() {
+            _isFavorite = true;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.favorite, color: Colors.white, size: 16),
+                  const SizedBox(width: 8),
+                  Text('${widget.hotspot.name} added to favorites'),
+                ],
+              ),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
 }
 
 class _EmptyState extends StatelessWidget {
@@ -561,9 +819,14 @@ class _EmptyState extends StatelessWidget {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryOrange,
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            child: const Text('Explore Now', style: TextStyle(color: Colors.white)),
+            child: const Text(
+              'Explore Now',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -594,10 +857,9 @@ class _ViewAllScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         itemCount: hotspots.length,
         separatorBuilder: (_, __) => const SizedBox(height: 16),
-        itemBuilder: (context, index) => _ViewAllCard(
-          hotspot: hotspots[index],
-          color: color,
-        ),
+        itemBuilder:
+            (context, index) =>
+                _ViewAllCard(hotspot: hotspots[index], color: color),
       ),
     );
   }
@@ -629,15 +891,16 @@ class _ViewAllCard extends StatelessWidget {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: hotspot.images.isNotEmpty
-                  ? Image.network(
-                      hotspot.images.first,
-                      width: 100,
-                      height: 80,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _buildPlaceholder(),
-                    )
-                  : _buildPlaceholder(),
+              child:
+                  hotspot.images.isNotEmpty
+                      ? Image.network(
+                        hotspot.images.first,
+                        width: 100,
+                        height: 80,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _buildPlaceholder(),
+                      )
+                      : _buildPlaceholder(),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -646,7 +909,10 @@ class _ViewAllCard extends StatelessWidget {
                 children: [
                   Text(
                     hotspot.name,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -658,7 +924,10 @@ class _ViewAllCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           hotspot.location,
-                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -689,33 +958,34 @@ void _showHotspotDetailsDialog(BuildContext context, Hotspot hotspot) {
   showDialog(
     context: context,
     barrierDismissible: true,
-    builder: (context) => Dialog(
-      insetPadding: const EdgeInsets.all(16),
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.9,
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
-        ),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.all(Radius.circular(12)),
-        ),
-        child: Stack(
-          children: [
-            SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildDialogImage(hotspot),
-                  _buildDialogContent(hotspot),
-                ],
-              ),
+    builder:
+        (context) => Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.9,
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
             ),
-            _buildCloseButton(context),
-          ],
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.all(Radius.circular(12)),
+            ),
+            child: Stack(
+              children: [
+                SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildDialogImage(hotspot),
+                      _buildDialogContent(hotspot),
+                    ],
+                  ),
+                ),
+                _buildCloseButton(context),
+              ],
+            ),
+          ),
         ),
-      ),
-    ),
   );
 }
 
@@ -727,21 +997,22 @@ Widget _buildDialogImage(Hotspot hotspot) {
     ),
     child: AspectRatio(
       aspectRatio: 16 / 9,
-      child: hotspot.images.isNotEmpty
-          ? Image.network(
-              hotspot.images.first,
-              width: double.infinity,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _buildDialogPlaceholder(),
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Container(
-                  color: Colors.grey[300],
-                  child: const Center(child: CircularProgressIndicator()),
-                );
-              },
-            )
-          : _buildDialogPlaceholder(),
+      child:
+          hotspot.images.isNotEmpty
+              ? Image.network(
+                hotspot.images.first,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _buildDialogPlaceholder(),
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Container(
+                    color: Colors.grey[300],
+                    child: const Center(child: CircularProgressIndicator()),
+                  );
+                },
+              )
+              : _buildDialogPlaceholder(),
     ),
   );
 }
@@ -749,9 +1020,7 @@ Widget _buildDialogImage(Hotspot hotspot) {
 Widget _buildDialogPlaceholder() {
   return Container(
     color: Colors.grey[300],
-    child: const Center(
-      child: Icon(Icons.image, size: 50, color: Colors.grey),
-    ),
+    child: const Center(child: Icon(Icons.image, size: 50, color: Colors.grey)),
   );
 }
 
@@ -781,7 +1050,10 @@ Widget _buildDialogContent(Hotspot hotspot) {
               ),
               child: const Text(
                 'Open',
-                style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Colors.green,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -801,22 +1073,47 @@ Widget _buildDialogContent(Hotspot hotspot) {
 
 List<Widget> _buildInfoRows(Hotspot hotspot) {
   return [
-    _buildInfoRow('Transportation Available', 
-        hotspot.transportation.isNotEmpty ? hotspot.transportation.join(", ") : "Unknown"),
-    _buildInfoRow('Operating Hours', 
-        hotspot.operatingHours.isNotEmpty ? hotspot.operatingHours : "Unknown"),
-    _buildInfoRow('Safety Tips & Warnings', 
-        (hotspot.safetyTips?.isNotEmpty ?? false) ? hotspot.safetyTips!.join(", ") : "Unknown"),
-    _buildInfoRow('Entrance Fee', 
-        hotspot.entranceFee != null ? '₱${hotspot.entranceFee}' : "Unknown"),
-    _buildInfoRow('Contact Info', 
-        hotspot.contactInfo.isNotEmpty ? hotspot.contactInfo : "Unknown"),
-    _buildInfoRow('Local Guide', 
-        (hotspot.localGuide?.isNotEmpty ?? false) ? hotspot.localGuide! : "Unknown"),
+    _buildInfoRow(
+      'Transportation Available',
+      hotspot.transportation.isNotEmpty
+          ? hotspot.transportation.join(", ")
+          : "Unknown",
+    ),
+    _buildInfoRow(
+      'Operating Hours',
+      hotspot.operatingHours.isNotEmpty ? hotspot.operatingHours : "Unknown",
+    ),
+    _buildInfoRow(
+      'Safety Tips & Warnings',
+      (hotspot.safetyTips?.isNotEmpty ?? false)
+          ? hotspot.safetyTips!.join(", ")
+          : "Unknown",
+    ),
+    _buildInfoRow(
+      'Entrance Fee',
+      hotspot.entranceFee != null ? '₱${hotspot.entranceFee}' : "Unknown",
+    ),
+    _buildInfoRow(
+      'Contact Info',
+      hotspot.contactInfo.isNotEmpty ? hotspot.contactInfo : "Unknown",
+    ),
+    _buildInfoRow(
+      'Local Guide',
+      (hotspot.localGuide?.isNotEmpty ?? false)
+          ? hotspot.localGuide!
+          : "Unknown",
+    ),
     _buildInfoRow('Restroom', hotspot.restroom ? "Available" : "Not Available"),
-    _buildInfoRow('Food Access', hotspot.foodAccess ? "Available" : "Not Available"),
-    _buildInfoRow('Suggested to Bring', 
-        (hotspot.suggestions?.isNotEmpty ?? false) ? hotspot.suggestions!.join(", ") : "Unknown"),
+    _buildInfoRow(
+      'Food Access',
+      hotspot.foodAccess ? "Available" : "Not Available",
+    ),
+    _buildInfoRow(
+      'Suggested to Bring',
+      (hotspot.suggestions?.isNotEmpty ?? false)
+          ? hotspot.suggestions!.join(", ")
+          : "Unknown",
+    ),
   ];
 }
 

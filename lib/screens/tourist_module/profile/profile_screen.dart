@@ -6,17 +6,21 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:capstone_app/services/auth_service.dart';
+import 'package:capstone_app/services/favorites_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../login_screen.dart';
 import '../../../utils/constants.dart';
 import '../../../utils/colors.dart';
 import '../../../models/users.dart';
+import '../../../models/favorite_model.dart';
+import '../../../models/hotspots_model.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:capstone_app/services/arrival_service.dart';
 
 /// Profile screen for the tourist user.  
 class ProfileScreen extends StatefulWidget {
@@ -32,13 +36,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _error;
   StreamSubscription<User?>? _authStateSubscription;
   
+  // Favorites functionality
+  List<Favorite> _favorites = [];
+  StreamSubscription<List<Favorite>>? _favoritesSubscription;
+  
   // Check if current user is a guest
   bool get _isGuest => userProfile?.role.toLowerCase() == 'guest';
+
+  // Add to _ProfileScreenState:
+  List<Map<String, dynamic>> _arrivals = [];
+  bool _loadingArrivals = false;
+  Map<String, String> _hotspotNames = {};
 
   @override
   void initState() {
     super.initState();
     _initializeProfile();
+    _fetchArrivals();
   }
 
   void _initializeProfile() {
@@ -47,6 +61,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       debugPrint('Auth state changed: ${user?.uid}');
       if (user != null) {
         _fetchUserProfile();
+        _initializeFavoritesStream();
       } else {
         // Redirect to login if user is not authenticated
         if (mounted && ModalRoute.of(context)?.isCurrent == true) {
@@ -77,6 +92,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
     });
+  }
+
+  void _initializeFavoritesStream() {
+    _favoritesSubscription?.cancel();
+    _favoritesSubscription = FavoritesService.getUserFavorites().listen(
+      (favorites) {
+        if (mounted) {
+          setState(() {
+            _favorites = favorites;
+          });
+        }
+      },
+      onError: (error) => debugPrint('Error listening to favorites: $error'),
+    );
   }
 
   Future<void> _fetchUserProfile() async {
@@ -132,9 +161,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _fetchArrivals() async {
+    setState(() => _loadingArrivals = true);
+    try {
+      final arrivals = await ArrivalService.getUserArrivals();
+      // Fetch all hotspots and build a map of id -> name
+      final hotspotSnapshot = await FirebaseFirestore.instance.collection('Hotspots').get();
+      final hotspotNames = <String, String>{};
+      for (final doc in hotspotSnapshot.docs) {
+        hotspotNames[doc.id] = doc.data()['name'] ?? doc.id;
+      }
+      setState(() {
+        _arrivals = arrivals;
+        _hotspotNames = hotspotNames;
+        _loadingArrivals = false;
+      });
+    } catch (e) {
+      setState(() => _loadingArrivals = false);
+    }
+  }
+
   @override
   void dispose() {
     _authStateSubscription?.cancel();
+    _favoritesSubscription?.cancel();
     super.dispose();
   }
 
@@ -457,6 +507,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  // Favorites Button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.favorite, color: Colors.white, size: 20),
+                      label: const Text(
+                        'My Favorites',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryTeal,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 2,
+                      ),
+                      onPressed: () => _showAllFavorites(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                 ],
                 SizedBox(
                   width: double.infinity,
@@ -495,64 +570,440 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ],
             ),
+            if (!_isGuest) ...[
+              const SizedBox(height: 24),
+              _buildArrivalHistorySection(),
+            ],
             const SizedBox(height: 32),
-            if (_isGuest) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.orange.withOpacity(0.1),
-                      Colors.orange.withOpacity(0.05),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.orange.withOpacity(0.2),
-                    width: 1,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            // Remove the old inline favorites section and its conditional display
+            // ... existing code ...
+          ],
+        ),
+      ),
+    );
+  }
+
+
+
+
+  void _showAllFavorites() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _AllFavoritesScreen(favorites: _favorites),
+      ),
+    );
+  }
+
+  // Add this widget to _ProfileScreenState:
+  Widget _buildArrivalHistorySection() {
+    if (_loadingArrivals) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_arrivals.isEmpty) {
+      return Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(
+            children: const [
+              Icon(Icons.location_on, color: Colors.grey, size: 24),
+              SizedBox(width: 12),
+              Text('No arrival history yet', style: TextStyle(fontSize: 16)),
+            ],
+          ),
+        ),
+      );
+    }
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: const [
+                Icon(Icons.location_on, color: Colors.green, size: 24),
+                SizedBox(width: 12),
+                Text('Arrival History', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ..._arrivals.take(5).map((arrival) {
+              final hotspotId = arrival['hotspotId'] ?? '';
+              final hotspotName = _hotspotNames[hotspotId] ?? hotspotId;
+              final timestamp = arrival['timestamp'] as Timestamp?;
+              final date = timestamp?.toDate();
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
                   children: [
-                    Row(
+                    const Icon(Icons.place, size: 18, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        hotspotName,
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (date != null)
+                      Text(
+                        '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}',
+                        style: const TextStyle(fontSize: 13, color: Colors.grey),
+                      ),
+                  ],
+                ),
+              );
+            }),
+            if (_arrivals.length > 5)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text('+${_arrivals.length - 5} more...', style: const TextStyle(color: Colors.grey)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ================= AllFavoritesScreen =================
+class _AllFavoritesScreen extends StatelessWidget {
+  final List<Favorite> favorites;
+
+  const _AllFavoritesScreen({required this.favorites});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Favorites'),
+        backgroundColor: AppColors.primaryTeal,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: favorites.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.favorite_border, size: 80, color: Colors.grey[400]),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No favorites yet',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Start exploring hotspots and add them to your favorites!',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey[500],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: favorites.length,
+              itemBuilder: (context, index) {
+                final favorite = favorites[index];
+                final hotspot = favorite.hotspot;
+                if (hotspot == null) return const SizedBox.shrink();
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
                       children: [
-                        Icon(
-                          Icons.info_outline_rounded,
-                          color: Colors.orange[700],
-                          size: 24,
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: hotspot.images.isNotEmpty
+                              ? Image.network(
+                                  hotspot.images.first,
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => _buildPlaceholderImage(),
+                                )
+                              : _buildPlaceholderImage(),
                         ),
-                        const SizedBox(width: 12),
-                        Text(
-                          'Guest Account',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.orange[700],
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                hotspot.name,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textDark,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                hotspot.category,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                hotspot.location,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[500],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Added on ${_formatDate(favorite.addedAt)}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[400],
+                                ),
+                              ),
+                            ],
                           ),
+                        ),
+                        Column(
+                          children: [
+                            IconButton(
+                              onPressed: () => _removeFromFavorites(context, favorite),
+                              icon: Icon(Icons.favorite, color: Colors.red[400], size: 24),
+                              tooltip: 'Remove from favorites',
+                            ),
+                            const SizedBox(height: 8),
+                            IconButton(
+                              onPressed: () => _showHotspotDetails(context, hotspot),
+                              icon: Icon(Icons.info_outline, color: AppColors.primaryTeal, size: 24),
+                              tooltip: 'View details',
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'You\'re using a guest account with limited features. Create a full account to unlock profile editing and additional features.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.orange[600],
-                        height: 1.5,
+                  ),
+                );
+              },
+            ),
+    );
+  }
+
+  Widget _buildPlaceholderImage() {
+    return Container(
+      width: 80,
+      height: 80,
+      color: Colors.grey[300],
+      child: Icon(Icons.image, size: 32, color: Colors.grey[400]),
+    );
+  }
+
+  Future<void> _removeFromFavorites(BuildContext context, Favorite favorite) async {
+    try {
+      final success = await FavoritesService.removeFromFavorites(favorite.hotspotId);
+      if (success && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.favorite_border, color: Colors.white, size: 16),
+                const SizedBox(width: 8),
+                Text('${favorite.hotspot?.name ?? 'Hotspot'} removed from favorites'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error removing from favorites: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  void _showHotspotDetails(BuildContext context, Hotspot hotspot) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.9,
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.all(Radius.circular(12)),
+          ),
+          child: Stack(
+            children: [
+              SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(12),
+                        topRight: Radius.circular(12),
+                      ),
+                      child: AspectRatio(
+                        aspectRatio: 16 / 9,
+                        child: hotspot.images.isNotEmpty
+                            ? Image.network(
+                                hotspot.images.first,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => _buildDialogPlaceholder(),
+                              )
+                            : _buildDialogPlaceholder(),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            hotspot.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 22,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            hotspot.description,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade100,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text(
+                                  'Open',
+                                  style: TextStyle(
+                                    color: Colors.green,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                hotspot.category,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          _buildInfoRow('Location', hotspot.location),
+                          _buildInfoRow('District', hotspot.district),
+                          _buildInfoRow('Municipality', hotspot.municipality),
+                          _buildInfoRow('Transportation', hotspot.transportation.join(", ")),
+                          _buildInfoRow('Operating Hours', hotspot.operatingHours),
+                          _buildInfoRow('Entrance Fee', hotspot.formattedEntranceFee),
+                          _buildInfoRow('Contact Info', hotspot.contactInfo),
+                          _buildInfoRow('Restroom', hotspot.restroom ? "Available" : "Not Available"),
+                          _buildInfoRow('Food Access', hotspot.foodAccess ? "Available" : "Not Available"),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
+              Positioned(
+                top: 16,
+                right: 16,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+              ),
             ],
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  Widget _buildDialogPlaceholder() {
+    return Container(
+      color: Colors.grey[300],
+      child: const Center(child: Icon(Icons.image, size: 50, color: Colors.grey)),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$label:',
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 14, color: Colors.black87),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
   }
 }
 
